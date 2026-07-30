@@ -105,6 +105,7 @@ vi.mock("@/lib/queue/client", () => ({
   }),
   getRedisConnection: vi.fn(),
   POSTBACK_JOB_NAME: "process-postback",
+  INBOUND_DM_JOB_NAME: "process-inbound-dm",
 }));
 
 vi.mock("bullmq", () => {

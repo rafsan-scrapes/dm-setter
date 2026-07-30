@@ -63,9 +63,31 @@ interface WebhookEntry {
   messaging?: Array<{
     sender?: { id?: string };
     recipient?: { id?: string };
+    timestamp?: number;
     postback?: { mid?: string; title?: string; payload?: string };
     read?: { watermark?: number; seq?: number };
+    message?: {
+      mid?: string;
+      text?: string;
+      is_echo?: boolean;
+      attachments?: Array<{ type?: string }>;
+    };
   }>;
+}
+
+export interface WebhookMessageEvent {
+  instagramAccountId: string;
+  /** IGSID of the other participant, regardless of direction. */
+  participantId: string;
+  mid: string;
+  text: string;
+  /**
+   * True when this is an echo of a message the account itself sent
+   * (via the IG app, the dashboard, or an API send).
+   */
+  isEcho: boolean;
+  /** Meta event timestamp in ms, when provided. */
+  timestamp?: number;
 }
 
 export interface WebhookPostbackEvent {
@@ -120,6 +142,49 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
         commenterId,
         commenterName: value.from?.username,
         mediaId,
+      });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Parse Instagram DM message events (inbound messages plus echoes of the
+ * account's own sends). Inbound messages feed the AI setter; echoes keep
+ * the local conversation mirror complete and reveal human takeovers.
+ */
+export function parseMessageEvents(payload: WebhookPayload): WebhookMessageEvent[] {
+  const events: WebhookMessageEvent[] = [];
+
+  if (payload.object !== "instagram") return events;
+
+  for (const entry of payload.entry ?? []) {
+    for (const messaging of entry.messaging ?? []) {
+      const message = messaging.message;
+      if (!message?.mid) continue;
+
+      const senderId = messaging.sender?.id;
+      const recipientId = messaging.recipient?.id;
+      const accountId = entry.id;
+      if (!accountId || !senderId || !recipientId) continue;
+
+      const isEcho = Boolean(message.is_echo) || senderId === accountId;
+      const participantId = isEcho ? recipientId : senderId;
+      // A self-thread cannot happen in a real DM; drop malformed events.
+      if (!participantId || participantId === accountId) continue;
+
+      const text = message.text?.trim() ?? "";
+      const hasAttachments = (message.attachments?.length ?? 0) > 0;
+      if (!text && !hasAttachments) continue;
+
+      events.push({
+        instagramAccountId: accountId,
+        participantId,
+        mid: message.mid,
+        text: text || "[media]",
+        isEcho,
+        timestamp: messaging.timestamp,
       });
     }
   }

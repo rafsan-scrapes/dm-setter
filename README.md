@@ -1,115 +1,69 @@
 <div align="center">
 
-# OpenReply
+# OpenSetter
 
-Open-sourced ManyChat for Instagram comment-to-DM automation.
+Open source Instagram comment-to-DM automation with an AI DM setter.
+
+Built by [Obiri Mensah](https://github.com/obirimensah05) on top of [OpenReply](https://github.com/diwenne/openreply) by Diwen Huang.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/diwenne/openreply?style=flat&color=black)](https://github.com/diwenne/openreply/stargazers)
 [![Built with Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 
 </div>
 
-Someone comments `LINK` on your reel, and they get a DM with your link a second later. That is the whole idea. OpenReply watches the comments on your Instagram posts, and when a comment matches a keyword you set, it sends that person a private reply through the official Meta API. You can also post a public reply under the comment at the same time.
+Someone comments `LINK` on your reel and gets your DM a second later. That part is OpenReply, and it works exactly as before. OpenSetter adds what happens next: when the prospect replies, an AI setter answers in your voice, keeps the conversation going, qualifies them, and moves the right people toward a booked call. You stay in control the whole time.
 
-ManyChat does this and charges a monthly fee. OpenReply is the same core feature, free, running on your own infrastructure, with no seat limits and no plan caps.
+## What the AI setter does
 
-> If this saves you a subscription or a weekend of building, a star on the repo genuinely helps other people find it.
-
-## Why this exists
-
-Comment-to-DM is one feature, but every tool that offers it wants a recurring subscription for it. The actual work is a webhook, a keyword match, and one API call to Meta. That does not need to cost anything to run for a single account.
-
-OpenReply is built around Meta's official Instagram private replies. It does not scrape, it does not automate a browser, and it never asks for an Instagram password. That keeps your account inside Meta's rules, which matters if you care about not getting flagged.
-
-## Features
-
-- Keyword to DM. Match one or many keywords per post, whole-word or partial.
-- Optional public reply. Post a visible comment reply on top of the DM.
-- Tracked links. Swap a link for a tracked redirect and see clicks and CTR per campaign.
-- Two link buttons. Send up to two tappable link buttons in one DM, each a separate tracked link with its own click stats.
-- Follow gate. Optionally require a follow before you hand over the link. The DM asks the commenter to follow and tap a button; on tap, OpenReply checks Meta's `is_user_follow_business` flag and only sends the link once they follow, re-prompting until then. It fails open (sends the link anyway) when Instagram does not return follow status, so a real follower is never trapped.
-- Personalization. Use `{username}` in your message to greet the commenter by name.
-- Per-account rate limiting. Stays under Meta's documented cap of 750 private replies per hour, and queues the overflow instead of dropping it.
-- Multiple Instagram accounts. Connect several professional accounts under one workspace, each with its own limits.
-- Workspaces and roles. Owner, admin, and member roles with invite links, useful if you run this for clients.
-- Campaign templates. Start from a preset instead of a blank form.
-- Inbox. Read your Instagram DM conversations and reply from the dashboard, inside Meta's 24-hour messaging window. Cached so it loads instantly on repeat visits.
-- DM logs. Every send, skip, and failure is logged with a reason.
-- Self-comment filtering. Your own comments never trigger a reply, since Meta rejects DMing yourself anyway.
+- **Replies in your voice.** The setter drafts short, human DMs grounded in your persona, your goal, and (optionally) real examples of how you actually text, pulled from a style index.
+- **Knows your business.** Connect a knowledge base (a Supabase project with your notes, offer docs, and positioning) and the setter retrieves relevant facts before every reply. It never cites the source, it just knows things.
+- **Qualifies and books.** You give it a goal ("qualify for the mentorship, book a call") and a booking link. It hands out the link only when the conversation has earned it.
+- **Draft mode or autopilot.** In draft mode every reply waits for your approval in the dashboard. On autopilot, confident replies send themselves and edge cases are held for review: low confidence, sensitive topics, payment or legal questions, walls of text.
+- **Steps aside for humans.** Reply to a thread yourself (from the IG app or the dashboard) and the setter backs off. Toggle it per conversation from the inbox.
+- **Full audit trail.** Every draft, send, hold, and skip is logged with the model's confidence and reasons.
 
 ## How it works
 
-1. Someone comments on your Instagram post or reel.
-2. Meta sends a webhook to your OpenReply instance.
-3. OpenReply checks the comment against your active campaigns.
-4. On a keyword match, it queues a job.
-5. A background worker sends the private reply, and the public reply if you enabled one.
+1. Meta delivers the DM to your webhook.
+2. The message is mirrored into your own Postgres, so the setter remembers more than Meta's 20-message API window.
+3. A short debounce collapses rapid-fire messages into one reply.
+4. The worker gathers context: thread history, your own verbatim messages, knowledge-base facts, style examples.
+5. One LLM call drafts the reply and rates its own confidence.
+6. Safety gates decide: send it, or hold it for your review.
+7. Sends respect the same per-account hourly rate limit and workspace quota as campaign DMs.
 
-The web app receives the webhook and serves the dashboard. A separate worker process does the sending, because the send has to survive rate limits and retries. Both talk to the same Postgres and Redis.
+The LLM provider is pluggable: Anthropic API (default), any OpenAI-compatible endpoint, or a local `claude` / `codex` CLI if you want zero API spend. Retrieval embeddings run locally (no message content leaves your server for embedding).
+
+Everything OpenReply does is still here: keyword campaigns, tracked links, follow gates, workspaces and roles, the inbox, templates, reports, and follower analytics. See the [OpenReply README](https://github.com/diwenne/openreply#readme) for the full feature list.
 
 ## Quick start
 
-You need a few free accounts before anything works: a Meta developer app, a Resend account for login emails, and somewhere to host (Vercel for the web app, Railway for the worker plus Postgres and Redis). The Instagram account you connect has to be a Business or Creator account, not a personal one.
+You need a Meta developer app, a Resend account for login emails, and somewhere to host (Vercel for the web app, Railway or a VPS for the worker plus Postgres and Redis). The Instagram account must be Business or Creator.
 
-The honest version: the code deploys in minutes, but the Meta app setup is the part that takes real time. Read [docs/setup.md](docs/setup.md) before you start. It is the single setup guide, covering hosting, your domain, the environment, and every Meta wrong turn so you do not have to find them yourself.
-
-### Deploy the web app
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/diwenne/openreply)
-
-### Run it locally
+Read [docs/setup.md](docs/setup.md) first. It covers hosting, the Meta app, and every wrong turn. Then, for the AI setter, add to your worker's environment:
 
 ```bash
-git clone https://github.com/diwenne/openreply.git
-cd openreply
-npm install
-cp .env.example .env      # then fill in the values, see docs/setup.md
-docker-compose up -d      # starts Postgres and Redis
-npm run db:migrate
-npm run dev               # web app on http://localhost:3000
-npm run worker            # in a second terminal, this sends the DMs
+# Reply generation (pick one provider)
+AI_SETTER_PROVIDER=anthropic        # anthropic | openai | claude-cli | codex-cli
+AI_SETTER_MODEL=claude-opus-5
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: knowledge base + style index (Supabase)
+SECOND_BRAIN_SUPABASE_URL=https://xxx.supabase.co
+SECOND_BRAIN_SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Two processes, always. `npm run dev` serves the app and receives webhooks. `npm run worker` is what actually sends the messages. If comments come in and no DM ever arrives, the worker is the first thing to check.
+Turn the setter on per account under **AI Setter** in the dashboard: pick draft mode or autopilot, describe who you are and what the goal is, drop your booking link, save. Start in draft mode, approve a few dozen replies, then flip to autopilot when you trust it.
 
-Full environment variables and the production layout are in [docs/setup.md](docs/setup.md).
+### The knowledge base
 
-## Set it up with your AI assistant
-
-If you use Claude Code, Cursor, or a similar tool, the Meta setup is a lot faster with an assistant driving it. There is a ready-made prompt in the [Set it up with an AI assistant](docs/setup.md#set-it-up-with-an-ai-assistant) section of the setup guide. Paste it into your assistant inside a clone of this repo, hand over your keys as it asks, and it will walk you through connecting Instagram and going live.
-
-## Tech stack
-
-- Next.js 16 and React 19 for the web app and API routes
-- Prisma 7 with PostgreSQL
-- BullMQ on Redis for the send queue and the worker
-- Auth.js (NextAuth) with email magic links through Resend
-- Tailwind CSS for the interface
-- The official Instagram API with Instagram Login
-
-For the complete stack — application libraries, the two runtime processes, and the free services this runs on (Vercel, Neon, Redis Cloud, an Oracle Cloud always-free VM for the worker, Resend, Meta) — see [docs/stack.md](docs/stack.md).
-
-## Contributing
-
-Issues and pull requests are welcome. If you hit a Meta quirk that is not in the setup guide, a PR that documents it is worth as much as a code fix, because that is where everyone loses time.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+The setter's retrieval expects a Supabase project with a hybrid-search RPC (`onyankopon_hybrid_search`) over embedded document chunks and, optionally, a style-example RPC (`onyankopon_whatsapp_style_search`). Embeddings are 384-dimensional vectors from `paraphrase-multilingual-MiniLM-L12-v2`, generated locally at query time. If you skip this, the setter still works from persona, goal, and chat history alone.
 
 ## Credits
 
-Built and maintained by Diwen Huang.
+OpenSetter is a fork of [OpenReply](https://github.com/diwenne/openreply) by [Diwen Huang](https://github.com/diwenne) (with contributions by Anish Raj), which provides the entire comment-to-DM engine, dashboard, and Meta integration this project stands on. If OpenSetter is useful to you, star their repo too.
 
-- GitHub: [@diwenne](https://github.com/diwenne)
-- Website: [diwenhuang.ca](https://diwenhuang.ca)
-- X: [@diwenne](https://x.com/diwenne)
-- Instagram: [@devdiwen](https://instagram.com/devdiwen)
-
-OpenReply is a fork of [instagram-comment-to-dm](https://github.com/im-anishraj/instagram-comment-to-dm) by [Anish Raj](https://github.com/im-anishraj), also MIT licensed. The billing layer and plan caps were removed, and the setup was documented from scratch.
-
-## Star the repo
-
-If OpenReply is useful to you, star it. It is the simplest way to help the project reach the next person looking for a free way to do this.
+The AI reply engine is adapted from a private WhatsApp auto-reply bridge by Obiri Mensah, rebuilt for Instagram on top of OpenReply's queue and worker.
 
 ## License
 

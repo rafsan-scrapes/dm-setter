@@ -3,12 +3,12 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "OpenReply - Open source Instagram comment-to-DM automation",
+  title: "OpenSetter - Open source Instagram comment-to-DM automation",
   description:
     "A free, self-hosted ManyChat alternative. Turn Instagram keyword comments into automatic private replies using the official Meta API.",
 };
 
-const GITHUB_URL = "https://github.com/diwenne/openreply";
+const GITHUB_URL = "https://github.com/obirimensah05/openreply-x-ai-setter";
 
 function formatStars(count: number): string {
   if (count >= 1000) {
@@ -241,7 +241,7 @@ function DashboardPreview() {
 
 async function getGitHubStars(): Promise<number | null> {
   try {
-    const res = await fetch("https://api.github.com/repos/diwenne/openreply", {
+    const res = await fetch("https://api.github.com/repos/obirimensah05/openreply-x-ai-setter", {
       headers: { Accept: "application/vnd.github+json" },
       next: { revalidate: 3600 },
     });
@@ -259,8 +259,8 @@ export default async function Home() {
     <main className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3" aria-label="OpenReply home">
-            <span className="text-lg font-bold text-white">OpenReply</span>
+          <Link href="/" className="flex items-center gap-3" aria-label="OpenSetter home">
+            <span className="text-lg font-bold text-white">OpenSetter</span>
           </Link>
 
           <div className="flex items-center gap-4">
@@ -269,7 +269,7 @@ export default async function Home() {
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition hover:text-white"
-              aria-label="View OpenReply on GitHub"
+              aria-label="View OpenSetter on GitHub"
             >
               <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 fill-current">
                 <path d={githubIconPath} />
@@ -293,13 +293,14 @@ export default async function Home() {
           </div>
 
           <h1 className="mt-7 text-balance text-5xl font-black leading-[1.02] text-white sm:text-6xl lg:text-7xl">
-            Make every comment start the right DM
+            Every comment starts a DM. An AI setter takes it from there.
           </h1>
 
           <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
-            Open-sourced ManyChat. When someone comments your keyword on a post
-            or reel, they get your DM a second later. Free, self-hosted, and
-            built on the official Instagram API.
+            Open-sourced ManyChat, extended. When someone comments your keyword
+            they get your DM a second later, and when they reply, an AI setter
+            answers in your voice, qualifies them, and books the call. Free,
+            self-hosted, and built on the official Instagram API.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -436,7 +437,7 @@ export default async function Home() {
 
       <footer className="border-t border-white/10 py-8">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 text-sm text-zinc-500 sm:px-6 lg:px-8">
-          <span className="font-semibold text-zinc-300">OpenReply</span>
+          <span className="font-semibold text-zinc-300">OpenSetter</span>
           <a
             href={GITHUB_URL}
             target="_blank"

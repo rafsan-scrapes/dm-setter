@@ -1,6 +1,6 @@
 # Stack
 
-Everything OpenReply needs to run, in one place: the application libraries, the
+Everything OpenSetter needs to run, in one place: the application libraries, the
 runtime processes, and the specific (free) services this instance is deployed on.
 For the step-by-step setup, see [setup.md](setup.md).
 
@@ -60,3 +60,9 @@ in the repo. Full descriptions are in [setup.md](setup.md#environment-variables)
 `REDIS_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, `META_GRAPH_API_VERSION`,
 `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `FACEBOOK_APP_SECRET`,
 `WEBHOOK_VERIFY_TOKEN`.
+
+AI setter (worker; all optional): `AI_SETTER_PROVIDER`, `AI_SETTER_MODEL`,
+`AI_SETTER_BASE_URL`, `AI_SETTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`AI_SETTER_CLAUDE_BIN`, `AI_SETTER_CODEX_BIN`, `AI_SETTER_EMBEDDINGS`,
+`SECOND_BRAIN_SUPABASE_URL`, `SECOND_BRAIN_SUPABASE_SERVICE_ROLE_KEY`,
+`SECOND_BRAIN_EMBEDDING_MODEL`.

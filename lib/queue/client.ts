@@ -44,9 +44,25 @@ export interface ProcessPostbackJob {
   fallback?: boolean;
 }
 
-export type DmQueueJob = ProcessCommentJob | ProcessPostbackJob;
+// One Instagram DM message event (inbound or echo) for the AI setter
+// pipeline: mirror it locally, then maybe draft and send a reply.
+export interface ProcessInboundDmJob {
+  instagramAccountId: string;
+  participantId: string;
+  mid: string;
+  text: string;
+  isEcho: boolean;
+  /** Meta event timestamp in ms; falls back to enqueue time. */
+  timestamp?: number;
+}
+
+export type DmQueueJob =
+  | ProcessCommentJob
+  | ProcessPostbackJob
+  | ProcessInboundDmJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
+export const INBOUND_DM_JOB_NAME = "process-inbound-dm";
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

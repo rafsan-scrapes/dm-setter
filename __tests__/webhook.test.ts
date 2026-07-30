@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   verifyWebhookSignature,
   parseCommentEvents,
+  parseMessageEvents,
   parseReadEvents,
 } from "../lib/meta/webhook";
 import { createHmac } from "crypto";
@@ -337,5 +338,137 @@ describe("parseReadEvents", () => {
     };
 
     expect(parseReadEvents(payload)).toHaveLength(0);
+  });
+});
+
+describe("parseMessageEvents", () => {
+  it("should parse an inbound DM message", () => {
+    const payload = {
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_456",
+          time: 1234567890,
+          messaging: [
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              timestamp: 1770000000000,
+              message: { mid: "mid_abc", text: "hey, how does this work?" },
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = parseMessageEvents(payload);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      instagramAccountId: "ig_456",
+      participantId: "user_1",
+      mid: "mid_abc",
+      text: "hey, how does this work?",
+      isEcho: false,
+      timestamp: 1770000000000,
+    });
+  });
+
+  it("should mark echoes and key them by the recipient", () => {
+    const payload = {
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_456",
+          time: 1234567890,
+          messaging: [
+            {
+              sender: { id: "ig_456" },
+              recipient: { id: "user_1" },
+              message: { mid: "mid_echo", text: "our reply", is_echo: true },
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = parseMessageEvents(payload);
+    expect(events).toHaveLength(1);
+    expect(events[0].isEcho).toBe(true);
+    expect(events[0].participantId).toBe("user_1");
+  });
+
+  it("should use a media placeholder for attachment-only messages", () => {
+    const payload = {
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_456",
+          time: 1234567890,
+          messaging: [
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              message: { mid: "mid_img", attachments: [{ type: "image" }] },
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = parseMessageEvents(payload);
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toBe("[media]");
+  });
+
+  it("should skip events without a mid or without any content", () => {
+    const payload = {
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_456",
+          time: 1234567890,
+          messaging: [
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              message: { text: "no mid" },
+            },
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              message: { mid: "mid_empty" },
+            },
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              postback: { payload: "reveal:123" },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(parseMessageEvents(payload)).toHaveLength(0);
+  });
+
+  it("should ignore non-instagram payloads", () => {
+    const payload = {
+      object: "page",
+      entry: [
+        {
+          id: "ig_456",
+          time: 1,
+          messaging: [
+            {
+              sender: { id: "user_1" },
+              recipient: { id: "ig_456" },
+              message: { mid: "m", text: "t" },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(parseMessageEvents(payload)).toHaveLength(0);
   });
 });

@@ -3,11 +3,12 @@ import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import {
   parseCommentEvents,
+  parseMessageEvents,
   parsePostbackEvents,
   parseReadEvents,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
-import { POSTBACK_JOB_NAME } from "@/lib/queue/client";
+import { INBOUND_DM_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
@@ -111,6 +112,53 @@ export async function POST(request: NextRequest) {
           data: { workspaceId: account.workspaceId },
         });
       }
+    }
+
+    // DM message events (inbound + echoes) → the AI setter pipeline. The
+    // job is always enqueued so the local conversation mirror stays
+    // complete even while the setter is off. Inbound messages wait a
+    // short per-account delay so rapid-fire messages collapse into one
+    // reply; echoes are processed immediately.
+    const messageEvents = parseMessageEvents(
+      payload as Parameters<typeof parseMessageEvents>[0]
+    );
+
+    for (const event of messageEvents) {
+      const account = await prisma.instagramAccount.findUnique({
+        where: { instagramId: event.instagramAccountId },
+        select: {
+          workspaceId: true,
+          aiSetterConfig: { select: { replyDelaySeconds: true } },
+        },
+      });
+      if (!account) continue;
+
+      const delaySeconds = event.isEcho
+        ? 0
+        : account.aiSetterConfig?.replyDelaySeconds ?? 10;
+
+      await queue.add(
+        INBOUND_DM_JOB_NAME,
+        {
+          instagramAccountId: event.instagramAccountId,
+          participantId: event.participantId,
+          mid: event.mid,
+          text: event.text,
+          isEcho: event.isEcho,
+          timestamp: event.timestamp,
+        },
+        {
+          delay: delaySeconds * 1000,
+          // BullMQ forbids ":" in custom job ids and Meta mids are not
+          // charset-guaranteed, so sanitize defensively.
+          jobId: `dm_${event.mid.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+        }
+      );
+
+      await prisma.webhookEvent.update({
+        where: { id: webhookEvent.id },
+        data: { workspaceId: account.workspaceId },
+      });
     }
 
     // Button taps from opening DMs → deliver the reveal message.

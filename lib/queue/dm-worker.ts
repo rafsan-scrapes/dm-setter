@@ -2,11 +2,14 @@ import { Worker, type Job } from "bullmq";
 import {
   getDMQueue,
   getRedisConnection,
+  INBOUND_DM_JOB_NAME,
   POSTBACK_JOB_NAME,
   type DmQueueJob,
   type ProcessCommentJob,
+  type ProcessInboundDmJob,
   type ProcessPostbackJob,
 } from "./client";
+import { processInboundDm } from "./ai-setter-worker";
 import { prisma } from "@/lib/db/client";
 import {
   MetaApiError,
@@ -767,6 +770,9 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
+  }
+  if (job.name === INBOUND_DM_JOB_NAME) {
+    return processInboundDm(job as Job<ProcessInboundDmJob>);
   }
   return processComment(job as Job<ProcessCommentJob>);
 }

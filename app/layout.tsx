@@ -3,13 +3,15 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OpenReply - Open source Instagram comment-to-DM automation",
+  title: "OpenSetter - Open source Instagram comment-to-DM automation with an AI setter",
   description:
-    "A free, self-hosted ManyChat alternative. Send an Instagram DM automatically when someone comments a keyword on your post or reel, using the official Meta API.",
+    "A free, self-hosted ManyChat alternative with an AI DM setter. Comment-to-DM automation plus an AI that answers your DMs in your voice, qualifies prospects, and books calls, using the official Meta API.",
   keywords: [
     "instagram automation",
     "comment to DM",
     "instagram private replies",
+    "ai dm setter",
+    "instagram ai setter",
     "social commerce",
     "manychat alternative",
   ],

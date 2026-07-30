@@ -56,6 +56,13 @@ export default function InboxPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // Per-thread AI setter state, keyed by the contact's IGSID. Threads
+  // without an entry default to AI on (the worker creates rows lazily).
+  const [aiStates, setAiStates] = useState<
+    Record<string, { aiEnabled: boolean }>
+  >({});
+  const [aiToggling, setAiToggling] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
@@ -138,6 +145,53 @@ export default function InboxPage() {
     const timer = window.setInterval(() => void loadConversations(true), POLL_MS);
     return () => window.clearInterval(timer);
   }, [selectedAccountId, loadConversations]);
+
+  // AI setter state for the account's threads (which threads it may answer).
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    fetch(`/api/ai-setter/conversations?instagramAccountId=${selectedAccountId}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (!payload.success) return;
+        const next: Record<string, { aiEnabled: boolean }> = {};
+        for (const c of payload.data.conversations as Array<{
+          participantId: string;
+          aiEnabled: boolean;
+        }>) {
+          next[c.participantId] = { aiEnabled: c.aiEnabled };
+        }
+        setAiStates(next);
+      })
+      .catch(() => {});
+  }, [selectedAccountId]);
+
+  async function toggleAi() {
+    const contactId = active?.contact.id;
+    if (!contactId || aiToggling) return;
+    const current = aiStates[contactId]?.aiEnabled ?? true;
+    setAiToggling(true);
+    // Optimistic flip; roll back if the server disagrees.
+    setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: !current } }));
+    try {
+      const res = await fetch("/api/ai-setter/conversations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instagramAccountId: selectedAccountId,
+          participantId: contactId,
+          aiEnabled: !current,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: current } }));
+      }
+    } catch {
+      setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: current } }));
+    } finally {
+      setAiToggling(false);
+    }
+  }
 
   const loadMessages = useCallback(
     async (conversationId: string, silent: boolean) => {
@@ -344,6 +398,28 @@ export default function InboxPage() {
                 <span className="truncate">
                   @{active.contact.username ?? "unknown"}
                 </span>
+                {(() => {
+                  const aiOn = aiStates[active.contact.id]?.aiEnabled ?? true;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => void toggleAi()}
+                      disabled={aiToggling}
+                      title={
+                        aiOn
+                          ? "The AI setter may answer this thread. Click to turn it off."
+                          : "The AI setter is off for this thread. Click to turn it on."
+                      }
+                      className={`ml-auto shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                        aiOn
+                          ? "border-accent/50 bg-accent/10 text-accent"
+                          : "border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {aiOn ? "AI on" : "AI off"}
+                    </button>
+                  );
+                })()}
               </div>
 
               <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
