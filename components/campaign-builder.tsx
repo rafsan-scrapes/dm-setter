@@ -49,6 +49,7 @@ interface LoadedCampaign {
   publicReplyEnabled: boolean;
   publicReplyMessage: string | null;
   publicReplyMessages: string[];
+  aiPersonalizeDm?: boolean;
   isActive: boolean;
   instagramAccountId: string;
   trackedLinks?: { destinationUrl: string; label?: string | null }[];
@@ -157,6 +158,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [keywordText, setKeywordText] = useState("");
 
   const [publicReplyEnabled, setPublicReplyEnabled] = useState(false);
+  const [aiPersonalizeDm, setAiPersonalizeDm] = useState(false);
   const [publicReplyMessages, setPublicReplyMessages] = useState<string[]>([""]);
 
   const [openingDmEnabled, setOpeningDmEnabled] = useState(false);
@@ -266,6 +268,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setOpeningDmMessage(c.openingDmMessage ?? "");
         setOpeningDmButtonLabel(c.openingDmButtonLabel ?? "");
         setDmMessage(c.dmMessage);
+        setAiPersonalizeDm(c.aiPersonalizeDm ?? false);
         setLinkButtonLabel(c.linkButtonLabel ?? "Open link");
         setIsActive(c.isActive);
         const link = c.trackedLinks?.[0]?.destinationUrl ?? "";
@@ -401,6 +404,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       matchAnyWord: matchMode === "any",
       keywords: matchMode === "any" ? [] : keywords,
       dmMessage,
+      aiPersonalizeDm,
       openingDmEnabled,
       openingDmMessage: openingDmEnabled ? openingDmMessage : null,
       openingDmButtonLabel: openingDmEnabled ? openingDmButtonLabel : null,
@@ -712,6 +716,22 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           >
             any word
           </Radio>
+          <div className="rounded-lg border border-border px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-foreground">
+                AI-personalize the DM per commenter
+              </span>
+              <Toggle
+                on={aiPersonalizeDm}
+                onToggle={() => setAiPersonalizeDm(!aiPersonalizeDm)}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              The AI setter rewrites your DM text as a direct response to each
+              comment, in your voice. Links and buttons stay untouched; any
+              failure falls back to your static text.
+            </p>
+          </div>
           <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
               reply to their comments under the post

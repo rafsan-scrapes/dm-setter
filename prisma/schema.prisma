@@ -196,6 +196,10 @@ model Automation {
   publicReplyMessages String[] @default([])
   isActive       Boolean @default(true)
   wholeWordMatch Boolean @default(true)
+  /// Rewrite the opening DM text per commenter with the AI setter's
+  /// persona, referencing their actual comment. Falls back to the static
+  /// text on any model failure.
+  aiPersonalizeDm Boolean @default(false)
   reportShareSlug    String? @unique
   reportShareEnabled Boolean @default(true)
 
@@ -368,6 +372,11 @@ model AiSetterConfig {
   replyDelaySeconds Int @default(10)
   /// When the account owner replies manually, pause the AI for that thread.
   pauseOnHumanReply Boolean @default(true)
+  /// Nudge a prospect who went quiet before the 24h messaging window
+  /// closes. Draft mode holds the nudge for review like any reply.
+  windowNudgeEnabled Boolean @default(false)
+  /// Hours after the prospect's last message before the nudge fires.
+  windowNudgeHours Int @default(20)
   /// IGSIDs the setter must never reply to.
   blockedUserIds String[] @default([])
 
@@ -389,10 +398,15 @@ model DmConversation {
 
   /// Per-thread kill switch for the AI setter.
   aiEnabled Boolean @default(true)
+  /// Per-thread mode override; null inherits the account's mode. Lets one
+  /// thread run on autopilot while another holds drafts for review.
+  modeOverride AiSetterMode?
   /// Set when a human reply is detected and pauseOnHumanReply is on.
   humanTakeoverAt DateTime?
   lastInboundAt   DateTime?
   lastOutboundAt  DateTime?
+  /// When the last quiet-prospect nudge was sent (one per 24h window).
+  lastNudgeAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

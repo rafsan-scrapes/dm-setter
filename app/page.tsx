@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "A free, self-hosted ManyChat alternative. Turn Instagram keyword comments into automatic private replies using the official Meta API.",
 };
 
-const GITHUB_URL = "https://github.com/obirimensah05/openreply-x-ai-setter";
+const GITHUB_URL = "https://github.com/obirimensah05/opensetter";
 
 function formatStars(count: number): string {
   if (count >= 1000) {
@@ -241,7 +241,7 @@ function DashboardPreview() {
 
 async function getGitHubStars(): Promise<number | null> {
   try {
-    const res = await fetch("https://api.github.com/repos/obirimensah05/openreply-x-ai-setter", {
+    const res = await fetch("https://api.github.com/repos/obirimensah05/opensetter", {
       headers: { Accept: "application/vnd.github+json" },
       next: { revalidate: 3600 },
     });

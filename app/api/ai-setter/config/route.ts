@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { prisma } from "@/lib/db/client";
-import { isSecondBrainConfigured } from "@/lib/ai-setter/knowledge";
+import { getKnowledgeBackend } from "@/lib/ai-setter/knowledge";
 
 const configSchema = z.object({
   instagramAccountId: z.string().optional().nullable(),
@@ -17,6 +17,8 @@ const configSchema = z.object({
   minConfidence: z.number().min(0).max(1),
   replyDelaySeconds: z.number().int().min(0).max(600),
   pauseOnHumanReply: z.boolean(),
+  windowNudgeEnabled: z.boolean(),
+  windowNudgeHours: z.number().int().min(1).max(23),
   blockedUserIds: z.array(z.string().max(64)).max(500),
 });
 
@@ -53,7 +55,8 @@ export async function GET(request: NextRequest) {
         username: account.username,
         instagramId: account.instagramId,
       },
-      knowledgeConfigured: isSecondBrainConfigured(),
+      knowledgeConfigured: getKnowledgeBackend() !== null,
+      knowledgeBackend: getKnowledgeBackend(),
       config: config ?? {
         mode: "OFF",
         persona: null,
@@ -65,6 +68,8 @@ export async function GET(request: NextRequest) {
         minConfidence: 0.78,
         replyDelaySeconds: 10,
         pauseOnHumanReply: true,
+        windowNudgeEnabled: false,
+        windowNudgeHours: 20,
         blockedUserIds: [],
       },
     },
@@ -113,6 +118,8 @@ export async function PUT(request: NextRequest) {
     minConfidence: parsed.minConfidence,
     replyDelaySeconds: parsed.replyDelaySeconds,
     pauseOnHumanReply: parsed.pauseOnHumanReply,
+    windowNudgeEnabled: parsed.windowNudgeEnabled,
+    windowNudgeHours: parsed.windowNudgeHours,
     blockedUserIds: parsed.blockedUserIds,
   };
 

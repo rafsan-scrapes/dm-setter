@@ -1,10 +1,14 @@
 /**
  * Second-brain retrieval for the AI setter.
  *
- * Talks straight to the second brain's Supabase project via PostgREST:
- *  - onyankopon_hybrid_search   (semantic + full-text over knowledge chunks)
- *  - onyankopon_whatsapp_style_search (isolated index of the operator's
- *    own reply style, redacted at indexing time)
+ * Talks straight to the knowledge base's Supabase project via PostgREST:
+ *  - a hybrid-search RPC (semantic + full-text over knowledge chunks)
+ *  - a style-search RPC (isolated index of the operator's own reply
+ *    style, redacted at indexing time)
+ *
+ * Object names default to the schema shipped in schema/knowledge-base.sql
+ * and can be overridden per deployment (SECOND_BRAIN_*_RPC vars) to point
+ * at an existing knowledge base.
  *
  * Query embeddings come from the same local model the brain indexes with
  * (paraphrase-multilingual-MiniLM-L12-v2, 384 dims, symmetric so no
@@ -14,6 +18,11 @@
  * reply, it just makes it less informed.
  */
 
+import {
+  fetchLocalKnowledgeContext,
+  isLocalKnowledgeAvailable,
+} from "./knowledge-local";
+
 const RPC_TIMEOUT_MS = 30_000;
 const MAX_KNOWLEDGE_ITEMS = 5;
 const MAX_KNOWLEDGE_CHARS = 3000;
@@ -21,6 +30,18 @@ const MAX_STYLE_EXAMPLES = 4;
 const EMBEDDING_DIMENSIONS = 384;
 
 const DEFAULT_EMBEDDING_MODEL = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+
+function hybridSearchRpc(): string {
+  return process.env.SECOND_BRAIN_HYBRID_SEARCH_RPC ?? "opensetter_hybrid_search";
+}
+
+function styleSearchRpc(): string {
+  return process.env.SECOND_BRAIN_STYLE_SEARCH_RPC ?? "opensetter_style_search";
+}
+
+function documentsTable(): string {
+  return process.env.SECOND_BRAIN_DOCUMENTS_TABLE ?? "opensetter_documents";
+}
 
 interface SecondBrainCredentials {
   url: string;
@@ -34,8 +55,16 @@ function readCredentials(): SecondBrainCredentials | null {
   return { url: url.replace(/\/$/, ""), serviceRoleKey };
 }
 
+export type KnowledgeBackend = "supabase" | "sqlite" | null;
+
+export function getKnowledgeBackend(): KnowledgeBackend {
+  if (readCredentials()) return "supabase";
+  if (isLocalKnowledgeAvailable()) return "sqlite";
+  return null;
+}
+
 export function isSecondBrainConfigured(): boolean {
-  return readCredentials() !== null;
+  return getKnowledgeBackend() !== null;
 }
 
 // ─── Embeddings ─────────────────────────────────────────────────────────────
@@ -135,7 +164,7 @@ async function fetchFullTextFallback(
     limit: String(MAX_KNOWLEDGE_ITEMS),
   });
   const response = await fetch(
-    `${credentials.url}/rest/v1/onyankopon_documents?${params}`,
+    `${credentials.url}/rest/v1/${documentsTable()}?${params}`,
     {
       headers: {
         apikey: credentials.serviceRoleKey,
@@ -153,19 +182,26 @@ async function fetchFullTextFallback(
 }
 
 /**
- * Hybrid semantic + full-text lookup over the second brain's knowledge
- * chunks. Returns a rendered block ready for the prompt, or "" when
- * nothing relevant or the brain is unreachable.
+ * Hybrid semantic + full-text lookup over the knowledge base. Routes to
+ * Supabase when configured, otherwise to the local SQLite file. Returns
+ * a rendered block ready for the prompt, or "" when nothing relevant or
+ * no knowledge base is reachable.
  */
 export async function fetchKnowledgeContext(query: string): Promise<string> {
+  if (!query.trim()) return "";
+
   const credentials = readCredentials();
-  if (!credentials || !query.trim()) return "";
+  if (!credentials) {
+    if (!isLocalKnowledgeAvailable()) return "";
+    const embedding = await embedQuery(query);
+    return fetchLocalKnowledgeContext(query, embedding);
+  }
 
   try {
     const embedding = await embedQuery(query);
     if (!embedding) return fetchFullTextFallback(credentials, query);
 
-    const rows = (await callRpc(credentials, "onyankopon_hybrid_search", {
+    const rows = (await callRpc(credentials, hybridSearchRpc(), {
       query_embedding: embedding,
       query_text: query,
       match_count: MAX_KNOWLEDGE_ITEMS,
@@ -230,7 +266,7 @@ export async function fetchStyleExamples(incomingText: string): Promise<string> 
 
     const rows = (await callRpc(
       credentials,
-      "onyankopon_whatsapp_style_search",
+      styleSearchRpc(),
       {
         query_embedding: embedding,
         match_count: MAX_STYLE_EXAMPLES,

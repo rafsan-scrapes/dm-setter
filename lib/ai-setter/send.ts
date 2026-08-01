@@ -12,6 +12,40 @@ import {
   releaseWorkspaceDMReservation,
   reserveWorkspaceDMSend,
 } from "@/lib/billing/usage";
+import { getDMQueue, WINDOW_NUDGE_JOB_NAME } from "@/lib/queue/client";
+import type { AiSetterConfig, DmConversation } from "@/app/generated/prisma/client";
+
+const WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Keep a margin so a nudge never races the window's actual close. */
+const WINDOW_CLOSE_MARGIN_MS = 30 * 60 * 1000;
+
+/**
+ * After any outbound setter send, arm the quiet-prospect check for this
+ * 24h window. The job id is anchored to lastInboundAt, so one window can
+ * only ever produce one nudge, no matter how many sends happen inside it.
+ */
+async function scheduleWindowNudge(
+  conversation: DmConversation,
+  config: AiSetterConfig | null
+): Promise<void> {
+  if (!config?.windowNudgeEnabled) return;
+  if ((conversation.modeOverride ?? config.mode) === "OFF") return;
+  if (!conversation.lastInboundAt) return;
+
+  const anchor = conversation.lastInboundAt.getTime();
+  const fireAt = anchor + config.windowNudgeHours * 60 * 60 * 1000;
+  const delay = fireAt - Date.now();
+  if (delay <= 0) return;
+  if (fireAt > anchor + WINDOW_MS - WINDOW_CLOSE_MARGIN_MS) return;
+
+  await getDMQueue()
+    .add(
+      WINDOW_NUDGE_JOB_NAME,
+      { conversationId: conversation.id, windowAnchorTs: anchor },
+      { delay, jobId: `nudge_${conversation.id}_${anchor}` }
+    )
+    .catch(() => {});
+}
 
 export interface SendAiReplyParams {
   replyLogId: string;
@@ -39,6 +73,7 @@ export async function sendAiReply(
           instagramId: true,
           accessToken: true,
           workspaceId: true,
+          aiSetterConfig: true,
         },
       },
     },
@@ -91,9 +126,13 @@ export async function sendAiReply(
         },
       })
       .catch(() => {});
+    const isNudge = replyLog.inboundMid.startsWith("nudge:");
     await prisma.dmConversation.update({
       where: { id: replyLog.conversationId },
-      data: { lastOutboundAt: sentAt },
+      data: {
+        lastOutboundAt: sentAt,
+        ...(isNudge ? { lastNudgeAt: sentAt } : {}),
+      },
     });
     await prisma.aiReplyLog.update({
       where: { id: replyLog.id },
@@ -105,6 +144,12 @@ export async function sendAiReply(
         errorMessage: null,
       },
     });
+    if (!isNudge) {
+      await scheduleWindowNudge(
+        replyLog.conversation,
+        replyLog.instagramAccount.aiSetterConfig
+      );
+    }
     return { ok: true };
   } catch (error: unknown) {
     await releaseWorkspaceDMReservation(account.workspaceId, usage.periodStart);

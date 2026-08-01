@@ -1,15 +1,21 @@
-# OpenReply — Local Development Services
-# Run: docker-compose up -d
+# OpenSetter services.
+#
+# Full self-hosted stack (web + worker + Postgres + Redis):
+#   ./scripts/setup.sh docker     # writes .env with generated secrets
+#   docker compose up -d --build
+#
+# Local development (databases only, `npm run dev` on the host):
+#   docker compose up -d postgres redis
 
 services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: openreply
+      POSTGRES_DB: opensetter
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -30,6 +36,33 @@ services:
       timeout: 5s
       retries: 5
 
+  web:
+    build: .
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["npx", "tsx", "worker/dm-worker.ts"]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      # Cache the locally downloaded embedding model across restarts.
+      - hfcache:/root/.cache/huggingface
+
 volumes:
   pgdata:
   redisdata:
+  hfcache:

@@ -4,7 +4,11 @@
 
 import { completeSetterPrompt } from "./llm";
 import { fetchKnowledgeContext, fetchStyleExamples } from "./knowledge";
-import { buildSetterSystemPrompt, buildSetterUserPrompt } from "./prompt";
+import {
+  buildNudgeUserPrompt,
+  buildSetterSystemPrompt,
+  buildSetterUserPrompt,
+} from "./prompt";
 import type { DraftReply, SetterPromptContext } from "./types";
 
 /**
@@ -91,6 +95,44 @@ export async function generateSetterDraft(
 
   const system = buildSetterSystemPrompt(params.config);
   const userPrompt = buildSetterUserPrompt(context);
+  const raw = await completeSetterPrompt(system, userPrompt);
+  return extractDraftReply(raw);
+}
+
+/**
+ * Draft a quiet-prospect nudge. Same persona, goal, and output contract
+ * as a normal reply; the "incoming message" is replaced by the situation.
+ */
+export async function generateWindowNudge(params: {
+  participantUsername?: string | null;
+  history: SetterPromptContext["history"];
+  humanStyleAnchor: string[];
+  quietHours: number;
+  config: GenerateDraftParams["config"];
+}): Promise<DraftReply> {
+  const lastInbound = [...params.history]
+    .reverse()
+    .find((message) => message.direction === "IN");
+  const knowledgeContext =
+    params.config.knowledgeEnabled && lastInbound
+      ? await fetchKnowledgeContext(lastInbound.text).catch(() => "")
+      : "";
+
+  const context: Omit<SetterPromptContext, "incomingText"> = {
+    participantUsername: params.participantUsername,
+    history: params.history,
+    humanStyleAnchor: params.humanStyleAnchor,
+    knowledgeContext,
+    styleExamples: "",
+    persona: params.config.persona,
+    goal: params.config.goal,
+    bookingLink: params.config.bookingLink,
+    language: params.config.language,
+    minConfidence: params.config.minConfidence,
+  };
+
+  const system = buildSetterSystemPrompt(params.config);
+  const userPrompt = buildNudgeUserPrompt(context, params.quietHours);
   const raw = await completeSetterPrompt(system, userPrompt);
   return extractDraftReply(raw);
 }

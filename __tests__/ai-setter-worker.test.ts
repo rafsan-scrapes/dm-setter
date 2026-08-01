@@ -13,7 +13,7 @@ import type { ProcessInboundDmJob } from "../lib/queue/client";
 const mocks = vi.hoisted(() => ({
   prisma: {
     instagramAccount: { findUnique: vi.fn() },
-    dmConversation: { upsert: vi.fn(), update: vi.fn() },
+    dmConversation: { upsert: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
     dmMessage: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     aiReplyLog: {
       create: vi.fn(),
@@ -22,12 +22,14 @@ const mocks = vi.hoisted(() => ({
     },
   },
   generateSetterDraft: vi.fn(),
+  generateWindowNudge: vi.fn(),
   sendAiReply: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/ai-setter/generate", () => ({
   generateSetterDraft: mocks.generateSetterDraft,
+  generateWindowNudge: mocks.generateWindowNudge,
 }));
 vi.mock("@/lib/ai-setter/send", () => ({ sendAiReply: mocks.sendAiReply }));
 
@@ -107,6 +109,13 @@ beforeEach(() => {
   mocks.prisma.aiReplyLog.update.mockResolvedValue({ id: "log_1" });
   mocks.generateSetterDraft.mockResolvedValue({
     reply: "klar, was machst du aktuell?",
+    confidence: 0.9,
+    shouldSend: true,
+    needsReview: false,
+    reasons: [],
+  });
+  mocks.generateWindowNudge.mockResolvedValue({
+    reply: "hey, bist du noch dran?",
     confidence: 0.9,
     shouldSend: true,
     needsReview: false,
@@ -321,5 +330,136 @@ describe("processInboundDm", () => {
         data: expect.objectContaining({ status: "HELD" }),
       })
     );
+  });
+});
+
+import { processWindowNudge } from "../lib/queue/ai-setter-worker";
+import type { ProcessWindowNudgeJob } from "../lib/queue/client";
+
+const NUDGE_ANCHOR = Date.now() - 20 * 60 * 60 * 1000;
+
+function makeNudgeJob(): Job<ProcessWindowNudgeJob> {
+  return {
+    data: { conversationId: "conv_1", windowAnchorTs: NUDGE_ANCHOR },
+    opts: { attempts: 3 },
+    attemptsMade: 0,
+  } as unknown as Job<ProcessWindowNudgeJob>;
+}
+
+function nudgeConversation(overrides: Record<string, unknown> = {}) {
+  return {
+    ...BASE_CONVERSATION,
+    lastInboundAt: new Date(NUDGE_ANCHOR),
+    lastNudgeAt: null,
+    modeOverride: null,
+    instagramAccount: {
+      ...BASE_ACCOUNT,
+      aiSetterConfig: { ...BASE_CONFIG, windowNudgeEnabled: true },
+    },
+    ...overrides,
+  };
+}
+
+describe("processWindowNudge", () => {
+  beforeEach(() => {
+    mocks.prisma.dmConversation.findUnique.mockResolvedValue(
+      nudgeConversation()
+    );
+    mocks.prisma.dmMessage.findFirst.mockResolvedValue({ direction: "OUT" });
+    mocks.generateSetterDraft.mockClear();
+  });
+
+  it("should draft and auto-send a nudge when the prospect stayed quiet", async () => {
+    await processWindowNudge(makeNudgeJob());
+
+    expect(mocks.prisma.aiReplyLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          inboundMid: `nudge:conv_1:${NUDGE_ANCHOR}`,
+          reasons: expect.arrayContaining([
+            "window nudge: prospect went quiet",
+          ]),
+        }),
+      })
+    );
+    expect(mocks.sendAiReply).toHaveBeenCalledWith({ replyLogId: "log_1" });
+  });
+
+  it("should skip when the prospect replied since scheduling", async () => {
+    mocks.prisma.dmConversation.findUnique.mockResolvedValue(
+      nudgeConversation({ lastInboundAt: new Date(NUDGE_ANCHOR + 60_000) })
+    );
+
+    await processWindowNudge(makeNudgeJob());
+
+    expect(mocks.prisma.aiReplyLog.create).not.toHaveBeenCalled();
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+  });
+
+  it("should skip when the prospect spoke last", async () => {
+    mocks.prisma.dmMessage.findFirst.mockResolvedValue({ direction: "IN" });
+
+    await processWindowNudge(makeNudgeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+  });
+
+  it("should skip when nudges are disabled", async () => {
+    mocks.prisma.dmConversation.findUnique.mockResolvedValue(
+      nudgeConversation({
+        instagramAccount: {
+          ...BASE_ACCOUNT,
+          aiSetterConfig: { ...BASE_CONFIG, windowNudgeEnabled: false },
+        },
+      })
+    );
+
+    await processWindowNudge(makeNudgeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+  });
+
+  it("should hold the nudge instead of sending when the thread is in draft mode", async () => {
+    mocks.prisma.dmConversation.findUnique.mockResolvedValue(
+      nudgeConversation({ modeOverride: "DRAFT" })
+    );
+
+    await processWindowNudge(makeNudgeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+    expect(mocks.prisma.aiReplyLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "HELD" }),
+      })
+    );
+  });
+});
+
+describe("per-thread mode override", () => {
+  it("should auto-send in an AUTO thread while the account default is DRAFT", async () => {
+    mocks.prisma.instagramAccount.findUnique.mockResolvedValue({
+      ...BASE_ACCOUNT,
+      aiSetterConfig: { ...BASE_CONFIG, mode: "DRAFT" },
+    });
+    mocks.prisma.dmConversation.upsert.mockResolvedValue({
+      ...BASE_CONVERSATION,
+      modeOverride: "AUTO",
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.sendAiReply).toHaveBeenCalledWith({ replyLogId: "log_1" });
+  });
+
+  it("should stay silent in an OFF thread while the account default is AUTO", async () => {
+    mocks.prisma.dmConversation.upsert.mockResolvedValue({
+      ...BASE_CONVERSATION,
+      modeOverride: "OFF",
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.generateSetterDraft).not.toHaveBeenCalled();
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
   });
 });

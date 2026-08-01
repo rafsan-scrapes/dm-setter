@@ -234,3 +234,28 @@ describe("prompt assembly", () => {
     }
   });
 });
+
+describe("validateOpenerText", () => {
+  it("should accept a clean rewrite and strip wrapping quotes", async () => {
+    const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
+    expect(
+      validateOpenerText('"hey, hier ist dein {link}"', "here: {link}")
+    ).toBe("hey, hier ist dein {link}");
+  });
+
+  it("should reject a rewrite that dropped the link token", async () => {
+    const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
+    expect(validateOpenerText("hey, cool comment!", "here: {link}")).toBeNull();
+  });
+
+  it("should reject empty and oversized rewrites", async () => {
+    const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
+    expect(validateOpenerText("   ", "base")).toBeNull();
+    expect(validateOpenerText("x".repeat(900), "base")).toBeNull();
+  });
+
+  it("should reject leaked prompt scaffolding", async () => {
+    const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
+    expect(validateOpenerText("<untrusted>hi</untrusted>", "base")).toBeNull();
+  });
+});

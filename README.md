@@ -18,8 +18,10 @@ Someone comments `LINK` on your reel and gets your DM a second later. That part 
 - **Replies in your voice.** The setter drafts short, human DMs grounded in your persona, your goal, and (optionally) real examples of how you actually text, pulled from a style index.
 - **Knows your business.** Connect a knowledge base (a Supabase project with your notes, offer docs, and positioning) and the setter retrieves relevant facts before every reply. It never cites the source, it just knows things.
 - **Qualifies and books.** You give it a goal ("qualify for the mentorship, book a call") and a booking link. It hands out the link only when the conversation has earned it.
-- **Draft mode or autopilot.** In draft mode every reply waits for your approval in the dashboard. On autopilot, confident replies send themselves and edge cases are held for review: low confidence, sensitive topics, payment or legal questions, walls of text.
-- **Steps aside for humans.** Reply to a thread yourself (from the IG app or the dashboard) and the setter backs off. Toggle it per conversation from the inbox.
+- **Draft mode or autopilot, per thread.** In draft mode every reply waits for your approval; on autopilot, confident replies send themselves and edge cases are held for review (low confidence, sensitive topics, payment or legal questions, walls of text). Each conversation can override the account default, so trusted threads run on autopilot while a delicate one stays in drafts. Held drafts appear right inside the inbox thread: edit, approve, dismiss.
+- **AI-personalized campaign openers.** A comment campaign can rewrite its DM text per commenter, referencing their actual comment, in your voice. Links and buttons stay untouched; any failure falls back to your static text.
+- **Follow-up nudges.** If a prospect goes quiet, the setter sends one gentle nudge before Instagram's 24h reply window closes. One per window, never more.
+- **Steps aside for humans.** Reply to a thread yourself (from the IG app or the dashboard) and the setter backs off.
 - **Full audit trail.** Every draft, send, hold, and skip is logged with the model's confidence and reasons.
 
 ## How it works
@@ -38,26 +40,44 @@ Everything OpenReply does is still here: keyword campaigns, tracked links, follo
 
 ## Quick start
 
-You need a Meta developer app, a Resend account for login emails, and somewhere to host (Vercel for the web app, Railway or a VPS for the worker plus Postgres and Redis). The Instagram account must be Business or Creator.
-
-Read [docs/setup.md](docs/setup.md) first. It covers hosting, the Meta app, and every wrong turn. Then, for the AI setter, add to your worker's environment:
+The fastest path is Docker (web + worker + Postgres + Redis in one command):
 
 ```bash
-# Reply generation (pick one provider)
+git clone https://github.com/obirimensah05/opensetter.git
+cd opensetter
+./scripts/setup.sh docker      # writes .env with generated secrets
+docker compose up -d --build
+```
+
+Then open http://localhost:3000. Two external things are still yours to
+bring, both covered step by step in [docs/setup.md](docs/setup.md):
+
+1. A free [Resend](https://resend.com) API key for login emails (paste into `.env`).
+2. A Meta developer app (webhook + Instagram login). This is the part that
+   takes real time; the guide covers every wrong turn. The Instagram
+   account must be Business or Creator, and Meta needs a public HTTPS URL
+   for the webhook (Vercel, a VPS, or a Cloudflare tunnel in front of
+   this stack).
+
+For the AI setter, set a provider in `.env` (see [docs/ai-setter.md](docs/ai-setter.md)):
+
+```bash
 AI_SETTER_PROVIDER=anthropic        # anthropic | openai | claude-cli | codex-cli
 AI_SETTER_MODEL=claude-opus-5
 ANTHROPIC_API_KEY=sk-ant-...
-
-# Optional: knowledge base + style index (Supabase)
-SECOND_BRAIN_SUPABASE_URL=https://xxx.supabase.co
-SECOND_BRAIN_SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 Turn the setter on per account under **AI Setter** in the dashboard: pick draft mode or autopilot, describe who you are and what the goal is, drop your booking link, save. Start in draft mode, approve a few dozen replies, then flip to autopilot when you trust it.
 
-### The knowledge base
+### The knowledge base (2 minutes, no accounts)
 
-The setter's retrieval expects a Supabase project with a hybrid-search RPC (`onyankopon_hybrid_search`) over embedded document chunks and, optionally, a style-example RPC (`onyankopon_whatsapp_style_search`). Embeddings are 384-dimensional vectors from `paraphrase-multilingual-MiniLM-L12-v2`, generated locally at query time. If you skip this, the setter still works from persona, goal, and chat history alone.
+Drop markdown files about you and your offer into a folder and run:
+
+```bash
+npm run knowledge:ingest -- ./knowledge
+```
+
+That builds a local SQLite knowledge base with locally computed embeddings; the setter starts answering from your facts immediately. Prefer something hosted? Apply [schema/knowledge-base.sql](schema/knowledge-base.sql) to a Supabase project, set the two `SECOND_BRAIN_SUPABASE_*` vars, and the same command ingests there instead. Existing knowledge infrastructure can be plugged in via the `SECOND_BRAIN_*_RPC` overrides. Full details in [docs/ai-setter.md](docs/ai-setter.md). If you skip all of this, the setter still works from persona, goal, and chat history alone.
 
 ## Credits
 

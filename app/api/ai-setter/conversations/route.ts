@@ -4,13 +4,19 @@ import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { prisma } from "@/lib/db/client";
 
-const toggleSchema = z.object({
+const patchSchema = z.object({
   instagramAccountId: z.string().optional().nullable(),
   participantId: z.string().min(1),
-  aiEnabled: z.boolean(),
+  aiEnabled: z.boolean().optional(),
+  /**
+   * Per-thread mode: OFF, DRAFT, or AUTO. null resets the thread to the
+   * account's default. Omitted leaves the current value alone.
+   */
+  modeOverride: z.enum(["OFF", "DRAFT", "AUTO"]).nullable().optional(),
 });
 
-// Read per-thread AI state for the inbox (keyed by participant IGSID).
+// Per-thread AI state for the inbox: mode, toggle, and any held draft
+// waiting for review, keyed by the participant's IGSID.
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -37,16 +43,42 @@ export async function GET(request: NextRequest) {
       participantId: true,
       participantUsername: true,
       aiEnabled: true,
+      modeOverride: true,
       humanTakeoverAt: true,
       lastInboundAt: true,
+      aiReplies: {
+        where: { status: "HELD" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          draftText: true,
+          confidence: true,
+          reasons: true,
+          createdAt: true,
+        },
+      },
     },
   });
 
-  return NextResponse.json({ success: true, data: { conversations } });
+  return NextResponse.json({
+    success: true,
+    data: {
+      conversations: conversations.map((conversation) => ({
+        participantId: conversation.participantId,
+        participantUsername: conversation.participantUsername,
+        aiEnabled: conversation.aiEnabled,
+        modeOverride: conversation.modeOverride,
+        humanTakeoverAt: conversation.humanTakeoverAt,
+        lastInboundAt: conversation.lastInboundAt,
+        heldDraft: conversation.aiReplies[0] ?? null,
+      })),
+    },
+  });
 }
 
-// Toggle the AI setter for one thread. Re-enabling clears a human
-// takeover pause so the setter resumes immediately.
+// Update a thread's AI state. Setting a mode (or re-enabling) clears a
+// human takeover pause so the setter resumes immediately.
 export async function PATCH(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -56,9 +88,9 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  let parsed: z.infer<typeof toggleSchema>;
+  let parsed: z.infer<typeof patchSchema>;
   try {
-    parsed = toggleSchema.parse(await request.json());
+    parsed = patchSchema.parse(await request.json());
   } catch {
     return NextResponse.json(
       { success: false, error: "Invalid request body" },
@@ -77,6 +109,19 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const resumesAi =
+    parsed.aiEnabled === true ||
+    parsed.modeOverride === "DRAFT" ||
+    parsed.modeOverride === "AUTO";
+
+  const changes = {
+    ...(parsed.aiEnabled !== undefined ? { aiEnabled: parsed.aiEnabled } : {}),
+    ...(parsed.modeOverride !== undefined
+      ? { modeOverride: parsed.modeOverride }
+      : {}),
+    ...(resumesAi ? { humanTakeoverAt: null } : {}),
+  };
+
   const conversation = await prisma.dmConversation.upsert({
     where: {
       instagramAccountId_participantId: {
@@ -87,12 +132,10 @@ export async function PATCH(request: NextRequest) {
     create: {
       instagramAccountId: account.id,
       participantId: parsed.participantId,
-      aiEnabled: parsed.aiEnabled,
+      aiEnabled: parsed.aiEnabled ?? true,
+      modeOverride: parsed.modeOverride ?? null,
     },
-    update: {
-      aiEnabled: parsed.aiEnabled,
-      ...(parsed.aiEnabled ? { humanTakeoverAt: null } : {}),
-    },
+    update: changes,
   });
 
   return NextResponse.json({ success: true, data: { conversation } });

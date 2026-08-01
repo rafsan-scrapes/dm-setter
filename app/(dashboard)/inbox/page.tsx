@@ -24,6 +24,27 @@ const CACHE_MAX_AGE_MS = 60_000;
 const convCacheKey = (accountId: string) => `inbox:convs:${accountId}`;
 const msgCacheKey = (conversationId: string) => `inbox:msgs:${conversationId}`;
 
+interface HeldDraft {
+  id: string;
+  draftText: string;
+  confidence: number;
+  reasons: string[];
+  createdAt: string;
+}
+
+interface ThreadAiState {
+  aiEnabled: boolean;
+  modeOverride: "OFF" | "DRAFT" | "AUTO" | null;
+  heldDraft: HeldDraft | null;
+}
+
+const THREAD_MODES = [
+  { value: "DEFAULT", label: "AI: account default" },
+  { value: "AUTO", label: "AI: autopilot" },
+  { value: "DRAFT", label: "AI: drafts only" },
+  { value: "OFF", label: "AI: off" },
+];
+
 function formatTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -57,11 +78,13 @@ export default function InboxPage() {
   const [sendError, setSendError] = useState<string | null>(null);
 
   // Per-thread AI setter state, keyed by the contact's IGSID. Threads
-  // without an entry default to AI on (the worker creates rows lazily).
-  const [aiStates, setAiStates] = useState<
-    Record<string, { aiEnabled: boolean }>
-  >({});
-  const [aiToggling, setAiToggling] = useState(false);
+  // without an entry inherit the account default (the worker creates rows
+  // lazily on the first message).
+  const [aiStates, setAiStates] = useState<Record<string, ThreadAiState>>({});
+  const [aiBusy, setAiBusy] = useState(false);
+  // Local edits to held drafts, keyed by draft id.
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -146,32 +169,47 @@ export default function InboxPage() {
     return () => window.clearInterval(timer);
   }, [selectedAccountId, loadConversations]);
 
-  // AI setter state for the account's threads (which threads it may answer).
-  useEffect(() => {
+  // AI setter state per thread: mode, toggle, and any held draft. Polled
+  // so drafts appear in an open inbox without a reload.
+  const loadAiStates = useCallback(async () => {
     if (!selectedAccountId) return;
-    fetch(`/api/ai-setter/conversations?instagramAccountId=${selectedAccountId}`)
-      .then((r) => r.json())
-      .then((payload) => {
-        if (!payload.success) return;
-        const next: Record<string, { aiEnabled: boolean }> = {};
-        for (const c of payload.data.conversations as Array<{
-          participantId: string;
-          aiEnabled: boolean;
-        }>) {
-          next[c.participantId] = { aiEnabled: c.aiEnabled };
-        }
-        setAiStates(next);
-      })
-      .catch(() => {});
+    try {
+      const res = await fetch(
+        `/api/ai-setter/conversations?instagramAccountId=${selectedAccountId}`,
+        { cache: "no-store" }
+      );
+      const payload = await res.json();
+      if (!payload.success) return;
+      const next: Record<string, ThreadAiState> = {};
+      for (const c of payload.data.conversations as Array<
+        ThreadAiState & { participantId: string }
+      >) {
+        next[c.participantId] = {
+          aiEnabled: c.aiEnabled,
+          modeOverride: c.modeOverride,
+          heldDraft: c.heldDraft,
+        };
+      }
+      setAiStates(next);
+    } catch {
+      // keep whatever is shown
+    }
   }, [selectedAccountId]);
 
-  async function toggleAi() {
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    // Initial fetch on account change; intentional, matching the
+    // conversations poll above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadAiStates();
+    const timer = window.setInterval(() => void loadAiStates(), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [selectedAccountId, loadAiStates]);
+
+  async function setThreadMode(modeValue: string) {
     const contactId = active?.contact.id;
-    if (!contactId || aiToggling) return;
-    const current = aiStates[contactId]?.aiEnabled ?? true;
-    setAiToggling(true);
-    // Optimistic flip; roll back if the server disagrees.
-    setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: !current } }));
+    if (!contactId || aiBusy) return;
+    setAiBusy(true);
     try {
       const res = await fetch("/api/ai-setter/conversations", {
         method: "PATCH",
@@ -179,17 +217,49 @@ export default function InboxPage() {
         body: JSON.stringify({
           instagramAccountId: selectedAccountId,
           participantId: contactId,
-          aiEnabled: !current,
+          modeOverride: modeValue === "DEFAULT" ? null : modeValue,
+          aiEnabled: true,
         }),
       });
       const data = await res.json();
-      if (!data.success) {
-        setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: current } }));
+      if (data.success) void loadAiStates();
+    } catch {
+      // state refresh will correct the UI
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function actOnDraft(draftId: string, action: "approve" | "dismiss") {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setDraftError(null);
+    try {
+      const body =
+        action === "approve"
+          ? { action, text: (draftEdits[draftId] ?? "").trim() || undefined }
+          : { action };
+      const res = await fetch(`/api/ai-setter/replies/${draftId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDraftEdits((prev) => {
+          const next = { ...prev };
+          delete next[draftId];
+          return next;
+        });
+        void loadAiStates();
+        if (activeId) void loadMessages(activeId, true);
+      } else {
+        setDraftError(data.error ?? "Something went wrong");
       }
     } catch {
-      setAiStates((prev) => ({ ...prev, [contactId]: { aiEnabled: current } }));
+      setDraftError("Something went wrong");
     } finally {
-      setAiToggling(false);
+      setAiBusy(false);
     }
   }
 
@@ -355,8 +425,16 @@ export default function InboxPage() {
                     }`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">
-                        @{c.contact.username ?? "unknown"}
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        {aiStates[c.contact.id]?.heldDraft && (
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-warning"
+                            title="AI draft waiting for review"
+                          />
+                        )}
+                        <span className="truncate text-sm font-medium text-foreground">
+                          @{c.contact.username ?? "unknown"}
+                        </span>
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
                         {formatTime(c.updatedTime)}
@@ -399,25 +477,24 @@ export default function InboxPage() {
                   @{active.contact.username ?? "unknown"}
                 </span>
                 {(() => {
-                  const aiOn = aiStates[active.contact.id]?.aiEnabled ?? true;
+                  const state = aiStates[active.contact.id];
+                  const current = state?.aiEnabled === false
+                    ? "OFF"
+                    : state?.modeOverride ?? "DEFAULT";
                   return (
-                    <button
-                      type="button"
-                      onClick={() => void toggleAi()}
-                      disabled={aiToggling}
-                      title={
-                        aiOn
-                          ? "The AI setter may answer this thread. Click to turn it off."
-                          : "The AI setter is off for this thread. Click to turn it on."
-                      }
-                      className={`ml-auto shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
-                        aiOn
-                          ? "border-accent/50 bg-accent/10 text-accent"
-                          : "border-border text-muted hover:text-foreground"
-                      }`}
+                    <select
+                      value={current}
+                      onChange={(e) => void setThreadMode(e.target.value)}
+                      disabled={aiBusy}
+                      title="How the AI setter handles this thread"
+                      className="ml-auto shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-muted focus:border-accent/40 focus:outline-none disabled:opacity-50"
                     >
-                      {aiOn ? "AI on" : "AI off"}
-                    </button>
+                      {THREAD_MODES.map((mode) => (
+                        <option key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </option>
+                      ))}
+                    </select>
                   );
                 })()}
               </div>
@@ -453,6 +530,56 @@ export default function InboxPage() {
                   ))
                 )}
               </div>
+
+              {(() => {
+                const heldDraft = aiStates[active.contact.id]?.heldDraft;
+                if (!heldDraft) return null;
+                const editValue = draftEdits[heldDraft.id] ?? heldDraft.draftText;
+                return (
+                  <div className="shrink-0 border-t border-accent/30 bg-accent/5 p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs font-semibold text-accent">
+                        AI draft waiting for review
+                      </span>
+                      <span className="text-[11px] tabular-nums text-muted">
+                        {Math.round(heldDraft.confidence * 100)}% confident
+                      </span>
+                    </div>
+                    <textarea
+                      value={editValue}
+                      onChange={(e) =>
+                        setDraftEdits((prev) => ({
+                          ...prev,
+                          [heldDraft.id]: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      className="mt-2 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                    />
+                    {draftError && (
+                      <p className="mt-1 text-xs text-error">{draftError}</p>
+                    )}
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void actOnDraft(heldDraft.id, "dismiss")}
+                        disabled={aiBusy}
+                        className="rounded-lg px-3 py-1.5 text-xs text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void actOnDraft(heldDraft.id, "approve")}
+                        disabled={aiBusy || !editValue.trim()}
+                        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                      >
+                        Approve & send
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="shrink-0 border-t border-border p-3">
                 {sendError && (

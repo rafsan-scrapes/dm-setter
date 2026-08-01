@@ -4,12 +4,15 @@ import {
   getRedisConnection,
   INBOUND_DM_JOB_NAME,
   POSTBACK_JOB_NAME,
+  WINDOW_NUDGE_JOB_NAME,
   type DmQueueJob,
   type ProcessCommentJob,
   type ProcessInboundDmJob,
   type ProcessPostbackJob,
+  type ProcessWindowNudgeJob,
 } from "./client";
-import { processInboundDm } from "./ai-setter-worker";
+import { processInboundDm, processWindowNudge } from "./ai-setter-worker";
+import { personalizeCampaignOpener } from "@/lib/ai-setter/campaign-opener";
 import { prisma } from "@/lib/db/client";
 import {
   MetaApiError,
@@ -108,7 +111,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       },
     },
     include: {
-      instagramAccount: true,
+      instagramAccount: { include: { aiSetterConfig: true } },
       workspace: true,
       trackedLinks: {
         select: {
@@ -410,10 +413,27 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       sendFollowPrompt = alreadyFollows !== true;
     }
 
+    // AI-personalized opener: rewrite the first-touch text as a direct
+    // response to this specific comment. Null (model failure or an
+    // unusable rewrite) falls back to the static campaign text.
+    let personalizedOpener: string | null = null;
+    if (automation.aiPersonalizeDm && !sendFollowPrompt) {
+      const setterConfig = automation.instagramAccount.aiSetterConfig;
+      personalizedOpener = await personalizeCampaignOpener({
+        baseMessage: useOpeningDm
+          ? (automation.openingDmMessage as string)
+          : automation.dmMessage,
+        commentText,
+        commenterName,
+        persona: setterConfig?.persona,
+        goal: automation.goal ?? setterConfig?.goal,
+      });
+    }
+
     try {
       if (useOpeningDm) {
         const openingText = renderMessageWithTracking({
-          message: automation.openingDmMessage as string,
+          message: personalizedOpener ?? (automation.openingDmMessage as string),
           commenterName,
           trackedLinks: [],
         });
@@ -446,7 +466,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         // Try button template first; if Meta rejects it, fall back to inline links.
         const bodyText =
           renderMessageWithoutLink({
-            message: automation.dmMessage,
+            message: personalizedOpener ?? automation.dmMessage,
             commenterName,
           }) || "Here's your link:";
         const buttons = buildLinkButtons(
@@ -469,7 +489,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
             formatError(buttonError)
           );
           const fallbackMessage = buildInlineLinkFallback(
-            automation.dmMessage,
+            personalizedOpener ?? automation.dmMessage,
             commenterName,
             automation.trackedLinks,
             bodyText
@@ -483,7 +503,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         }
       } else {
         const dmMessage = renderMessageWithTracking({
-          message: automation.dmMessage,
+          message: personalizedOpener ?? automation.dmMessage,
           commenterName,
           trackedLinks: automation.trackedLinks,
         });
@@ -549,7 +569,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, isActive: true },
     include: {
-      instagramAccount: true,
+      instagramAccount: { include: { aiSetterConfig: true } },
       workspace: true,
       trackedLinks: {
         select: { slug: true, label: true, destinationUrl: true },
@@ -774,6 +794,9 @@ async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === INBOUND_DM_JOB_NAME) {
     return processInboundDm(job as Job<ProcessInboundDmJob>);
   }
+  if (job.name === WINDOW_NUDGE_JOB_NAME) {
+    return processWindowNudge(job as Job<ProcessWindowNudgeJob>);
+  }
   return processComment(job as Job<ProcessCommentJob>);
 }
 
@@ -782,7 +805,10 @@ async function recordWorkerFailure(
   error: Error
 ) {
   try {
-    const instagramAccountId = job?.data.instagramAccountId;
+    const instagramAccountId =
+      job && "instagramAccountId" in job.data
+        ? job.data.instagramAccountId
+        : undefined;
     const commentId =
       job && "commentId" in job.data ? job.data.commentId : null;
     const account = instagramAccountId

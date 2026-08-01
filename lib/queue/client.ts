@@ -56,13 +56,23 @@ export interface ProcessInboundDmJob {
   timestamp?: number;
 }
 
+// Delayed check on a quiet prospect: if they still have not replied when
+// this fires (and the 24h window is still open), the setter nudges once.
+export interface ProcessWindowNudgeJob {
+  conversationId: string;
+  /** lastInboundAt (ms) when the nudge was scheduled: the window anchor. */
+  windowAnchorTs: number;
+}
+
 export type DmQueueJob =
   | ProcessCommentJob
   | ProcessPostbackJob
-  | ProcessInboundDmJob;
+  | ProcessInboundDmJob
+  | ProcessWindowNudgeJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
 export const INBOUND_DM_JOB_NAME = "process-inbound-dm";
+export const WINDOW_NUDGE_JOB_NAME = "process-window-nudge";
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

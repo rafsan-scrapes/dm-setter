@@ -91,6 +91,30 @@ function renderStyleAnchor(context: SetterPromptContext): string {
     .join("\n");
 }
 
+/**
+ * User prompt for a quiet-prospect nudge: no new incoming message, just
+ * the thread so far and an instruction to re-open it gently.
+ */
+export function buildNudgeUserPrompt(
+  context: Omit<SetterPromptContext, "incomingText">,
+  quietHours: number
+): string {
+  return [
+    `Prospect: ${context.participantUsername ?? "unknown"}`,
+    `Situation: the prospect has not replied for about ${quietHours} hours. Write ONE short, casual follow-up that re-opens the conversation without pressure. Reference where the conversation left off. Never mention time limits, windows, or that this is a follow-up system.`,
+    "<untrusted>",
+    "How the owner actually texts in this thread (verbatim human-typed messages; this register outranks every other style source):",
+    renderStyleAnchor(context as SetterPromptContext),
+    "",
+    "Conversation so far (oldest first):",
+    renderHistory(context as SetterPromptContext),
+    "",
+    "Reference knowledge (relevant facts from the owner's private knowledge base):",
+    context.knowledgeContext || "(no directly relevant knowledge available)",
+    "</untrusted>",
+  ].join("\n");
+}
+
 /** Build the user prompt carrying all untrusted conversation material. */
 export function buildSetterUserPrompt(context: SetterPromptContext): string {
   return [

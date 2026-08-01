@@ -27,6 +27,8 @@ interface SetterConfigForm {
   minConfidence: number;
   replyDelaySeconds: number;
   pauseOnHumanReply: boolean;
+  windowNudgeEnabled: boolean;
+  windowNudgeHours: number;
 }
 
 const DEFAULT_FORM: SetterConfigForm = {
@@ -40,6 +42,8 @@ const DEFAULT_FORM: SetterConfigForm = {
   minConfidence: 0.78,
   replyDelaySeconds: 10,
   pauseOnHumanReply: true,
+  windowNudgeEnabled: false,
+  windowNudgeHours: 20,
 };
 
 const MODES: Array<{
@@ -107,7 +111,9 @@ export default function AiSetterPage() {
   const [selectedAccountId, setSelectedAccountId] = useState("");
 
   const [form, setForm] = useState<SetterConfigForm>(DEFAULT_FORM);
-  const [knowledgeConfigured, setKnowledgeConfigured] = useState(false);
+  const [knowledgeBackend, setKnowledgeBackend] = useState<
+    "supabase" | "sqlite" | null
+  >(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
@@ -144,7 +150,7 @@ export default function AiSetterPage() {
       .then((payload) => {
         if (!payload.success) return;
         const config = payload.data.config;
-        setKnowledgeConfigured(payload.data.knowledgeConfigured);
+        setKnowledgeBackend(payload.data.knowledgeBackend ?? null);
         setForm({
           mode: config.mode,
           persona: config.persona ?? "",
@@ -156,6 +162,8 @@ export default function AiSetterPage() {
           minConfidence: config.minConfidence,
           replyDelaySeconds: config.replyDelaySeconds,
           pauseOnHumanReply: config.pauseOnHumanReply,
+          windowNudgeEnabled: config.windowNudgeEnabled ?? false,
+          windowNudgeHours: config.windowNudgeHours ?? 20,
         });
       })
       .finally(() => setConfigLoading(false));
@@ -211,6 +219,8 @@ export default function AiSetterPage() {
           minConfidence: form.minConfidence,
           replyDelaySeconds: form.replyDelaySeconds,
           pauseOnHumanReply: form.pauseOnHumanReply,
+          windowNudgeEnabled: form.windowNudgeEnabled,
+          windowNudgeHours: form.windowNudgeHours,
           blockedUserIds: [],
         }),
       });
@@ -351,9 +361,11 @@ export default function AiSetterPage() {
                 onChange={(v) => update("knowledgeEnabled", v)}
                 label="Second brain"
                 hint={
-                  knowledgeConfigured
-                    ? "Pull facts about you and your offer from your connected knowledge base."
-                    : "No knowledge base connected (set SECOND_BRAIN_SUPABASE_URL). Replies rely on persona and chat history."
+                  knowledgeBackend === "supabase"
+                    ? "Pull facts about you and your offer from your connected Supabase knowledge base."
+                    : knowledgeBackend === "sqlite"
+                      ? "Pull facts about you and your offer from your local knowledge base file."
+                      : "No knowledge base yet. Create one in 2 minutes: drop markdown files about you and your offer into ./knowledge on the server, then run: npm run knowledge:ingest -- ./knowledge (or connect Supabase, see docs/ai-setter.md)."
                 }
               />
               <Toggle
@@ -368,6 +380,32 @@ export default function AiSetterPage() {
                 label="Step aside for humans"
                 hint="When you reply to a thread yourself, the setter stays out of it for a few hours."
               />
+              <Toggle
+                checked={form.windowNudgeEnabled}
+                onChange={(v) => update("windowNudgeEnabled", v)}
+                label="Follow-up nudge"
+                hint={`If a prospect goes quiet, send one gentle follow-up after ${form.windowNudgeHours}h, before Instagram's 24h reply window closes. Draft mode holds it for review.`}
+              />
+              {form.windowNudgeEnabled && (
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Nudge after (hours of silence)
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={23}
+                    value={form.windowNudgeHours}
+                    onChange={(e) =>
+                      update(
+                        "windowNudgeHours",
+                        Math.max(1, Math.min(23, Math.trunc(Number(e.target.value) || 20)))
+                      )
+                    }
+                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                  />
+                </label>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">

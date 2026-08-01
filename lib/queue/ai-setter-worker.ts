@@ -15,8 +15,8 @@ import type {
   AiSetterConfig,
   DmConversation,
 } from "@/app/generated/prisma/client";
-import type { ProcessInboundDmJob } from "./client";
-import { generateSetterDraft } from "@/lib/ai-setter/generate";
+import type { ProcessInboundDmJob, ProcessWindowNudgeJob } from "./client";
+import { generateSetterDraft, generateWindowNudge } from "@/lib/ai-setter/generate";
 import { evaluateAutoSendSafety, isTrivialAcknowledgement } from "@/lib/ai-setter/safety";
 import { sendAiReply } from "@/lib/ai-setter/send";
 import type { DraftReply } from "@/lib/ai-setter/types";
@@ -25,6 +25,9 @@ const HISTORY_LIMIT = 50;
 const STYLE_ANCHOR_LIMIT = 30;
 /** After a human replies manually, the setter stays out this long. */
 const HUMAN_TAKEOVER_PAUSE_MS = 6 * 60 * 60 * 1000;
+const WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Never nudge closer than this to the window actually closing. */
+const WINDOW_CLOSE_MARGIN_MS = 30 * 60 * 1000;
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -91,13 +94,15 @@ async function loadPromptInputs(conversationId: string) {
  * whether to auto-send or hold, then act. Returns the final status.
  */
 async function deliverDraft(params: {
-  job: Job<ProcessInboundDmJob>;
+  job: Job<ProcessInboundDmJob> | Job<ProcessWindowNudgeJob>;
   config: AiSetterConfig;
+  /** Effective mode for this thread (per-thread override or account mode). */
+  mode: "DRAFT" | "AUTO";
   replyLogId: string;
   incomingText: string;
   draft: DraftReply;
 }): Promise<void> {
-  const { job, config, replyLogId, incomingText, draft } = params;
+  const { job, config, mode, replyLogId, incomingText, draft } = params;
 
   const safety = evaluateAutoSendSafety({
     incomingText,
@@ -105,10 +110,10 @@ async function deliverDraft(params: {
     minConfidence: config.minConfidence,
   });
 
-  const shouldAutoSend = config.mode === "AUTO" && safety.allowed;
+  const shouldAutoSend = mode === "AUTO" && safety.allowed;
   if (!shouldAutoSend) {
     const reasons =
-      config.mode === "AUTO"
+      mode === "AUTO"
         ? safety.reasons
         : ["draft mode: every reply is held for review"];
     await prisma.aiReplyLog.update({
@@ -143,6 +148,137 @@ async function deliverDraft(params: {
     });
   }
   throw new Error(result.message ?? "AI reply send failed");
+}
+
+/**
+ * Delayed quiet-prospect check. Fires windowNudgeHours after the
+ * prospect's last message; if they are still silent, we spoke last, and
+ * the 24h window is still open, the setter drafts one gentle follow-up
+ * (held for review in draft mode, gated like any reply in auto mode).
+ */
+export async function processWindowNudge(
+  job: Job<ProcessWindowNudgeJob>
+): Promise<void> {
+  const { conversationId, windowAnchorTs } = job.data;
+
+  const conversation = await prisma.dmConversation.findUnique({
+    where: { id: conversationId },
+    include: { instagramAccount: { include: { aiSetterConfig: true } } },
+  });
+  if (!conversation) return;
+
+  const config = conversation.instagramAccount.aiSetterConfig;
+  if (!config || !config.windowNudgeEnabled) return;
+  const effectiveMode = conversation.modeOverride ?? config.mode;
+  if (effectiveMode === "OFF") return;
+  if (!conversation.aiEnabled) return;
+
+  // The prospect replied since this was scheduled: the newer window has
+  // its own job, this one is stale.
+  if (
+    !conversation.lastInboundAt ||
+    conversation.lastInboundAt.getTime() !== windowAnchorTs
+  ) {
+    return;
+  }
+  // One nudge per window, even across worker restarts.
+  if (
+    conversation.lastNudgeAt &&
+    conversation.lastNudgeAt.getTime() >= windowAnchorTs
+  ) {
+    return;
+  }
+  if (
+    config.pauseOnHumanReply &&
+    conversation.humanTakeoverAt &&
+    conversation.humanTakeoverAt.getTime() >= windowAnchorTs
+  ) {
+    return;
+  }
+  if (Date.now() > windowAnchorTs + WINDOW_MS - WINDOW_CLOSE_MARGIN_MS) return;
+
+  // Only nudge when the ball is in their court: our message must be last.
+  const lastMessage = await prisma.dmMessage.findFirst({
+    where: { conversationId },
+    orderBy: { sentAt: "desc" },
+    select: { direction: true },
+  });
+  if (!lastMessage || lastMessage.direction !== "OUT") return;
+
+  const existing = await prisma.aiReplyLog.findUnique({
+    where: { inboundMid: `nudge:${conversationId}:${windowAnchorTs}` },
+  });
+  if (existing) {
+    if (existing.status !== ("PENDING" satisfies AiReplyStatus)) return;
+    await deliverDraft({
+      job,
+      config,
+      mode: effectiveMode,
+      replyLogId: existing.id,
+      incomingText: existing.inboundText,
+      draft: {
+        reply: existing.draftText,
+        confidence: existing.confidence,
+        shouldSend: existing.shouldSend,
+        needsReview: existing.needsReview,
+        reasons: existing.reasons,
+      },
+    });
+    return;
+  }
+
+  const inputs = await loadPromptInputs(conversationId);
+  const quietHours = Math.round((Date.now() - windowAnchorTs) / 3_600_000);
+  const draft = await generateWindowNudge({
+    participantUsername: conversation.participantUsername,
+    history: inputs.history,
+    humanStyleAnchor: inputs.humanStyleAnchor,
+    quietHours,
+    config: {
+      persona: config.persona,
+      goal: config.goal,
+      bookingLink: config.bookingLink,
+      language: config.language,
+      knowledgeEnabled: config.knowledgeEnabled,
+      styleExamplesEnabled: config.styleExamplesEnabled,
+      minConfidence: config.minConfidence,
+    },
+  });
+
+  const lastInboundText =
+    [...inputs.history].reverse().find((message) => message.direction === "IN")
+      ?.text ?? "(quiet prospect)";
+
+  let replyLogId: string;
+  try {
+    const created = await prisma.aiReplyLog.create({
+      data: {
+        conversationId,
+        instagramAccountId: conversation.instagramAccountId,
+        inboundMid: `nudge:${conversationId}:${windowAnchorTs}`,
+        inboundText: lastInboundText,
+        draftText: draft.reply,
+        confidence: draft.confidence,
+        shouldSend: draft.shouldSend,
+        needsReview: draft.needsReview,
+        reasons: [...draft.reasons, "window nudge: prospect went quiet"],
+        status: "PENDING",
+      },
+    });
+    replyLogId = created.id;
+  } catch (error: unknown) {
+    if (isUniqueViolation(error)) return;
+    throw error;
+  }
+
+  await deliverDraft({
+    job,
+    config,
+    mode: effectiveMode,
+    replyLogId,
+    incomingText: lastInboundText,
+    draft,
+  });
 }
 
 export async function processInboundDm(
@@ -207,7 +343,8 @@ export async function processInboundDm(
   }
 
   // ── Gate chain ──────────────────────────────────────────────────────────
-  if (!config || config.mode === "OFF") return;
+  const effectiveMode = conversation.modeOverride ?? config?.mode ?? "OFF";
+  if (!config || effectiveMode === "OFF") return;
   if (!conversation.aiEnabled) return;
   if (config.blockedUserIds.includes(participantId)) return;
 
@@ -257,6 +394,7 @@ export async function processInboundDm(
     await deliverDraft({
       job,
       config,
+      mode: effectiveMode,
       replyLogId: existing.id,
       incomingText: text,
       draft: {
@@ -312,6 +450,7 @@ export async function processInboundDm(
   await deliverDraft({
     job,
     config,
+    mode: effectiveMode,
     replyLogId,
     incomingText: text,
     draft,

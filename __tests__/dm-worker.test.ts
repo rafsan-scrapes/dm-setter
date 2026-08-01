@@ -106,6 +106,7 @@ vi.mock("@/lib/queue/client", () => ({
   getRedisConnection: vi.fn(),
   POSTBACK_JOB_NAME: "process-postback",
   INBOUND_DM_JOB_NAME: "process-inbound-dm",
+  WINDOW_NUDGE_JOB_NAME: "process-window-nudge",
 }));
 
 vi.mock("bullmq", () => {
@@ -276,7 +277,7 @@ describe("DM Worker — Full Pipeline", () => {
         instagramAccount: { instagramId: "ig_456" },
       },
       include: {
-        instagramAccount: true,
+        instagramAccount: { include: { aiSetterConfig: true } },
         workspace: true,
         trackedLinks: {
           select: {
