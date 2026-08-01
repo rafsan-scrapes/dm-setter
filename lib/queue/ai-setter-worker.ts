@@ -21,8 +21,11 @@ import { evaluateAutoSendSafety, isTrivialAcknowledgement } from "@/lib/ai-sette
 import { sendAiReply } from "@/lib/ai-setter/send";
 import type { DraftReply } from "@/lib/ai-setter/types";
 
-const HISTORY_LIMIT = 50;
-const STYLE_ANCHOR_LIMIT = 30;
+// The setter reads the whole thread with this user; each message is
+// truncated when rendered, so even long threads stay prompt-sized. The
+// ceiling only guards against pathological threads.
+const HISTORY_LIMIT = 400;
+const STYLE_ANCHOR_LIMIT = 50;
 /** After a human replies manually, the setter stays out this long. */
 const HUMAN_TAKEOVER_PAUSE_MS = 6 * 60 * 60 * 1000;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
