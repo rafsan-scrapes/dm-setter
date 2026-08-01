@@ -161,7 +161,25 @@ takes over where possible).
 - Sends share the campaign pipeline's per-account hourly rate limit and
   workspace quota.
 - The debounce (default 10s, per account) collapses rapid-fire messages
-  into one reply; the reply always answers the newest message with full
-  context.
+  into one reply, and a second supersede check runs after generation, so
+  a prospect who double-texts mid-draft never gets a stale answer.
+- **No double sends.** A draft is atomically claimed (SENDING) before
+  the Meta call; concurrent approvals, job retries, and crash-resumes
+  all back off. If the process dies mid-send or the network drops with
+  the outcome unknown, the draft is quarantined as HELD with a warning
+  to check the Instagram thread; nothing ambiguous is ever auto-retried.
+- **Missed webhooks heal themselves.** A reconciliation sweep (default
+  every 10 minutes, `DM_POLL_INTERVAL_MS`) backfills the local mirror
+  from Meta's Conversations API and routes a missed, still-answerable
+  prospect message through the normal pipeline.
+- Nudges are armed when the prospect's message arrives, not when the
+  setter replies, so windows where you replied by hand still nudge.
+- **Editing drafts teaches the setter.** An approval you edited before
+  sending is recorded as your own voice and feeds the style anchor of
+  every future draft in that thread (and is flagged `humanEdited` for
+  threshold tuning).
+- Knowledge retrieval embeds the last few thread turns together with the
+  newest message, so short follow-ups ("how much is it?") still retrieve
+  the right facts.
 - Instagram's 24h window is enforced by Meta: an approved draft whose
   window closed will fail with Meta's own error, visible on the draft.

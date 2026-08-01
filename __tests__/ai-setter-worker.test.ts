@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   generateSetterDraft: vi.fn(),
   generateWindowNudge: vi.fn(),
   sendAiReply: vi.fn(),
+  scheduleWindowNudge: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
@@ -31,7 +32,10 @@ vi.mock("@/lib/ai-setter/generate", () => ({
   generateSetterDraft: mocks.generateSetterDraft,
   generateWindowNudge: mocks.generateWindowNudge,
 }));
-vi.mock("@/lib/ai-setter/send", () => ({ sendAiReply: mocks.sendAiReply }));
+vi.mock("@/lib/ai-setter/send", () => ({
+  sendAiReply: mocks.sendAiReply,
+  scheduleWindowNudge: mocks.scheduleWindowNudge,
+}));
 
 import { processInboundDm } from "../lib/queue/ai-setter-worker";
 import { Prisma } from "@/app/generated/prisma/client";
@@ -365,7 +369,15 @@ describe("processWindowNudge", () => {
     mocks.prisma.dmConversation.findUnique.mockResolvedValue(
       nudgeConversation()
     );
-    mocks.prisma.dmMessage.findFirst.mockResolvedValue({ direction: "OUT" });
+    // Two distinct findFirst queries hit this mock: the "who spoke last"
+    // check (no direction filter) and the late-supersede check (filters
+    // direction IN). Answer each by shape.
+    mocks.prisma.dmMessage.findFirst.mockImplementation(
+      (args: { where?: { direction?: string } }) =>
+        args?.where?.direction === "IN"
+          ? Promise.resolve(null)
+          : Promise.resolve({ direction: "OUT" })
+    );
     mocks.generateSetterDraft.mockClear();
   });
 

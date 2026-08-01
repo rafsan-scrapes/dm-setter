@@ -6,6 +6,7 @@ import type { AiReplyStatus } from "@/app/generated/prisma/client";
 
 const STATUS_VALUES: AiReplyStatus[] = [
   "PENDING",
+  "SENDING",
   "SENT",
   "HELD",
   "SKIPPED",

@@ -17,6 +17,7 @@ import type {
 } from "@/app/generated/prisma/client";
 import type { ProcessInboundDmJob, ProcessWindowNudgeJob } from "./client";
 import { generateSetterDraft, generateWindowNudge } from "@/lib/ai-setter/generate";
+import { scheduleWindowNudge } from "@/lib/ai-setter/send";
 import { evaluateAutoSendSafety, isTrivialAcknowledgement } from "@/lib/ai-setter/safety";
 import { sendAiReply } from "@/lib/ai-setter/send";
 import type { DraftReply } from "@/lib/ai-setter/types";
@@ -104,8 +105,20 @@ async function deliverDraft(params: {
   replyLogId: string;
   incomingText: string;
   draft: DraftReply;
+  /** Thread and anchor for the late-supersede re-check before sending. */
+  conversationId: string;
+  supersededAfter: Date;
 }): Promise<void> {
-  const { job, config, mode, replyLogId, incomingText, draft } = params;
+  const {
+    job,
+    config,
+    mode,
+    replyLogId,
+    incomingText,
+    draft,
+    conversationId,
+    supersededAfter,
+  } = params;
 
   const safety = evaluateAutoSendSafety({
     incomingText,
@@ -126,8 +139,34 @@ async function deliverDraft(params: {
     return;
   }
 
+  // Late supersede: the prospect may have written again while the model
+  // was generating. The newer message's own job owns the reply; sending
+  // this one now would answer a stale conversation state.
+  const newerInbound = await prisma.dmMessage.findFirst({
+    where: {
+      conversationId,
+      direction: "IN",
+      sentAt: { gt: supersededAfter },
+    },
+    select: { id: true },
+  });
+  if (newerInbound) {
+    await prisma.aiReplyLog.update({
+      where: { id: replyLogId },
+      data: {
+        status: "SKIPPED",
+        reasons: [...draft.reasons, "superseded while the reply was generating"],
+      },
+    });
+    return;
+  }
+
   const result = await sendAiReply({ replyLogId });
   if (result.ok) return;
+
+  // conflict: someone else claimed it; ambiguous: quarantined as HELD by
+  // the send path. Neither may be retried from here.
+  if (result.error === "conflict" || result.error === "ambiguous") return;
 
   if (result.error === "quota" || result.error === "rate_limit") {
     // Not retryable within this job; hold so a human can send it later.
@@ -226,6 +265,8 @@ export async function processWindowNudge(
         needsReview: existing.needsReview,
         reasons: existing.reasons,
       },
+      conversationId,
+      supersededAfter: new Date(windowAnchorTs),
     });
     return;
   }
@@ -281,6 +322,8 @@ export async function processWindowNudge(
     replyLogId,
     incomingText: lastInboundText,
     draft,
+    conversationId,
+    supersededAfter: new Date(windowAnchorTs),
   });
 }
 
@@ -345,6 +388,14 @@ export async function processInboundDm(
     return;
   }
 
+  // Arm the quiet-prospect nudge for this window as soon as the message
+  // lands, independent of whether (or how) the setter ends up replying.
+  // The processor later verifies that we actually spoke last.
+  await scheduleWindowNudge(
+    { ...conversation, lastInboundAt: sentAt },
+    config ?? null
+  ).catch(() => {});
+
   // ── Gate chain ──────────────────────────────────────────────────────────
   const effectiveMode = conversation.modeOverride ?? config?.mode ?? "OFF";
   if (!config || effectiveMode === "OFF") return;
@@ -400,6 +451,8 @@ export async function processInboundDm(
       mode: effectiveMode,
       replyLogId: existing.id,
       incomingText: text,
+      conversationId: conversation.id,
+      supersededAfter: sentAt,
       draft: {
         reply: existing.draftText,
         confidence: existing.confidence,
@@ -457,5 +510,7 @@ export async function processInboundDm(
     replyLogId,
     incomingText: text,
     draft,
+    conversationId: conversation.id,
+    supersededAfter: sentAt,
   });
 }

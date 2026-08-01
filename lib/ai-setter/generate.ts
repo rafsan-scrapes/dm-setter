@@ -63,12 +63,33 @@ export interface GenerateDraftParams {
   };
 }
 
+/**
+ * Retrieval query built from the thread's recent turns, not just the
+ * newest message: "wie viel kostet das?" alone retrieves nothing, but
+ * with the last few messages it lands on the right offer facts.
+ */
+function buildKnowledgeQuery(
+  history: SetterPromptContext["history"],
+  incomingText: string | null,
+  participantUsername?: string | null
+): string {
+  const recentTurns = history
+    .slice(-6)
+    .map((message) => message.text.replace(/\s+/g, " ").slice(0, 160));
+  return [participantUsername, ...recentTurns, incomingText]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 1500);
+}
+
 export async function generateSetterDraft(
   params: GenerateDraftParams
 ): Promise<DraftReply> {
-  const knowledgeQuery = [params.participantUsername, params.incomingText]
-    .filter(Boolean)
-    .join("\n");
+  const knowledgeQuery = buildKnowledgeQuery(
+    params.history,
+    params.incomingText,
+    params.participantUsername
+  );
 
   const [knowledgeContext, styleExamples] = await Promise.all([
     params.config.knowledgeEnabled
@@ -110,13 +131,11 @@ export async function generateWindowNudge(params: {
   quietHours: number;
   config: GenerateDraftParams["config"];
 }): Promise<DraftReply> {
-  const lastInbound = [...params.history]
-    .reverse()
-    .find((message) => message.direction === "IN");
-  const knowledgeContext =
-    params.config.knowledgeEnabled && lastInbound
-      ? await fetchKnowledgeContext(lastInbound.text).catch(() => "")
-      : "";
+  const knowledgeContext = params.config.knowledgeEnabled
+    ? await fetchKnowledgeContext(
+        buildKnowledgeQuery(params.history, null, params.participantUsername)
+      ).catch(() => "")
+    : "";
 
   const context: Omit<SetterPromptContext, "incomingText"> = {
     participantUsername: params.participantUsername,

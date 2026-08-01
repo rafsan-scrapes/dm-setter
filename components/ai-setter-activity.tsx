@@ -13,7 +13,14 @@ export interface AiReplyItem {
   draftText: string;
   confidence: number;
   reasons: string[];
-  status: "PENDING" | "SENT" | "HELD" | "SKIPPED" | "FAILED" | "DISMISSED";
+  status:
+    | "PENDING"
+    | "SENDING"
+    | "SENT"
+    | "HELD"
+    | "SKIPPED"
+    | "FAILED"
+    | "DISMISSED";
   sentAt: string | null;
   errorMessage: string | null;
   createdAt: string;
@@ -27,6 +34,7 @@ export interface AiReplyItem {
 
 const STATUS_STYLES: Record<AiReplyItem["status"], { text: string; label: string }> = {
   SENT: { text: "text-success", label: "Sent" },
+  SENDING: { text: "text-warning", label: "Sending" },
   HELD: { text: "text-warning", label: "Needs review" },
   PENDING: { text: "text-warning", label: "Pending" },
   SKIPPED: { text: "text-muted", label: "Skipped" },

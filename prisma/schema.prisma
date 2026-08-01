@@ -455,6 +455,9 @@ model AiReplyLog {
   status       AiReplyStatus @default(PENDING)
   sentMid      String?
   sentAt       DateTime?
+  /// True when a human edited the draft before approving. Edited sends
+  /// count as the owner's own voice and feed the style anchor.
+  humanEdited  Boolean       @default(false)
   errorMessage String?
 
   createdAt DateTime @default(now())
@@ -535,6 +538,10 @@ enum DmMessageSource {
 
 enum AiReplyStatus {
   PENDING
+  /// Claimed for delivery; the Meta send call is in flight. A crash here
+  /// leaves the row SENDING, and recovery quarantines it as HELD instead
+  /// of ever resending automatically.
+  SENDING
   SENT
   /// Held for human review (draft mode, low confidence, or safety gate).
   HELD
