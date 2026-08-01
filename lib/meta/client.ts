@@ -750,9 +750,15 @@ export async function subscribeInstagramAccountToWebhooks(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
-        // message_echoes lets the AI setter mirror outbound messages and
-        // detect when a human replies manually from the Instagram app.
-        subscribed_fields: ["comments", "messages", "message_echoes"],
+        // Note: message_echoes (needed by the AI setter to mirror outbound
+        // messages and detect human takeovers) is NOT valid here; it can
+        // only be enabled app-wide in the dashboard's webhook settings.
+        subscribed_fields: [
+          "comments",
+          "messages",
+          "messaging_postbacks",
+          "messaging_seen",
+        ],
       }),
     }
   );
