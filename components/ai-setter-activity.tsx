@@ -112,7 +112,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
         <span className="truncate text-sm font-medium text-foreground">
           {contactLabel(reply)}
         </span>
-        <span className="shrink-0 text-[11px] text-zinc-500">
+        <span className="shrink-0 text-[11px] text-faint">
           {formatTime(reply.createdAt)}
         </span>
       </div>
@@ -151,7 +151,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
       </div>
 
       {reply.reasons.length > 0 && (
-        <p className="mt-2 text-[11px] text-zinc-500">
+        <p className="mt-2 text-[11px] text-faint">
           Held because: {reply.reasons.join("; ")}
         </p>
       )}
@@ -229,12 +229,12 @@ export default function AiSetterActivity({
                     {reply.inboundText}
                   </p>
                   {reply.draftText && (
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                    <p className="mt-0.5 truncate text-xs text-faint">
                       AI: {reply.draftText}
                     </p>
                   )}
                   {reply.status === "SKIPPED" && reply.reasons.length > 0 && (
-                    <p className="mt-0.5 truncate text-[11px] text-zinc-500">
+                    <p className="mt-0.5 truncate text-[11px] text-faint">
                       {reply.reasons.join("; ")}
                     </p>
                   )}

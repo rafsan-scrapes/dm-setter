@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function TemplatesPage() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen bg-background text-foreground" data-theme="dark">
       <PublicSiteHeader active="templates" />
 
       <section className="border-b border-white/10 bg-zinc-950/55">

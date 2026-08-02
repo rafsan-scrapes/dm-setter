@@ -12,7 +12,7 @@
  * already running then.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -29,11 +29,42 @@ export interface FollowerChartPoint {
   delta: number | null;
 }
 
-// Validated against the dark chart surface (#161618): lightness band, chroma
-// floor and 3:1 contrast all pass. See globals.css --color-accent.
-const SERIES_COLOR = "#6b8afd";
-const GRID_COLOR = "#2e2e33";
-const AXIS_TEXT = "#9b9ba3";
+// Recharts writes colors as SVG attributes, where CSS var() does not
+// resolve, so the theme tokens are read from the computed style and
+// re-read whenever data-theme flips on <html>.
+const FALLBACK_TOKENS = {
+  series: "#6b8afd", // --color-accent, validated at 3:1 on both surfaces
+  grid: "#2e2e33", // --color-border
+  axis: "#9b9ba3", // --color-muted
+  dotStroke: "#161618", // --color-surface
+};
+
+function readChartTokens(): typeof FALLBACK_TOKENS {
+  if (typeof window === "undefined") return FALLBACK_TOKENS;
+  const style = getComputedStyle(document.documentElement);
+  const token = (name: string, fallback: string) =>
+    style.getPropertyValue(name).trim() || fallback;
+  return {
+    series: token("--color-accent", FALLBACK_TOKENS.series),
+    grid: token("--color-border", FALLBACK_TOKENS.grid),
+    axis: token("--color-muted", FALLBACK_TOKENS.axis),
+    dotStroke: token("--color-surface", FALLBACK_TOKENS.dotStroke),
+  };
+}
+
+function useChartTokens(): typeof FALLBACK_TOKENS {
+  const [tokens, setTokens] = useState(FALLBACK_TOKENS);
+  useEffect(() => {
+    setTokens(readChartTokens());
+    const observer = new MutationObserver(() => setTokens(readChartTokens()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
+  return tokens;
+}
 
 function formatCompact(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -86,6 +117,7 @@ export default function FollowerChart({
   followers: number | null;
 }) {
   const [showTable, setShowTable] = useState(false);
+  const tokens = useChartTokens();
 
   const current = followers ?? data.at(-1)?.followers ?? null;
 
@@ -142,7 +174,7 @@ export default function FollowerChart({
         <div className="mt-4 max-h-72 overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-zinc-500">
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
                 <th className="py-2 pr-4 font-medium">Date</th>
                 <th className="py-2 px-3 font-medium text-right">Followers</th>
                 <th className="py-2 pl-3 font-medium text-right">Change</th>
@@ -174,21 +206,21 @@ export default function FollowerChart({
             >
               <CartesianGrid
                 vertical={false}
-                stroke={GRID_COLOR}
+                stroke={tokens.grid}
                 strokeDasharray="3 3"
               />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatDay}
-                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
-                stroke={GRID_COLOR}
+                tick={{ fill: tokens.axis, fontSize: 12 }}
+                stroke={tokens.grid}
                 tickLine={false}
                 minTickGap={24}
               />
               <YAxis
                 tickFormatter={formatCompact}
-                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
-                stroke={GRID_COLOR}
+                tick={{ fill: tokens.axis, fontSize: 12 }}
+                stroke={tokens.grid}
                 tickLine={false}
                 width={52}
                 // Followers rarely start near zero, so a zero baseline would
@@ -197,15 +229,15 @@ export default function FollowerChart({
               />
               <Tooltip
                 content={<ChartTooltip />}
-                cursor={{ stroke: GRID_COLOR, strokeWidth: 1 }}
+                cursor={{ stroke: tokens.grid, strokeWidth: 1 }}
               />
               <Line
                 type="monotone"
                 dataKey="followers"
-                stroke={SERIES_COLOR}
+                stroke={tokens.series}
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, fill: SERIES_COLOR, stroke: "#161618", strokeWidth: 2 }}
+                activeDot={{ r: 4, fill: tokens.series, stroke: tokens.dotStroke, strokeWidth: 2 }}
                 isAnimationActive={false}
               />
             </LineChart>

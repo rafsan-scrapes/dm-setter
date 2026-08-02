@@ -241,7 +241,7 @@ export default function SettingsPage() {
 
         {membersData?.invitations.length ? (
           <div className="mt-6 border-t border-border pt-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-faint">
               Pending invites
             </p>
             <div className="space-y-3">

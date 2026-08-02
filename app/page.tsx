@@ -256,7 +256,7 @@ async function getGitHubStars(): Promise<number | null> {
 export default async function Home() {
   const stars = await getGitHubStars();
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen bg-background text-foreground" data-theme="dark">
       <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3" aria-label="OpenSetter home">

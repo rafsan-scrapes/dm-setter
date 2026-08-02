@@ -45,7 +45,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <h1 className="mt-4 text-3xl font-black leading-tight text-white">
             Join {invitation.workspace.name}
           </h1>
-          <p className="mt-4 text-sm leading-6 text-zinc-400">
+          <p className="mt-4 text-sm leading-6 text-muted">
             You were invited as {invitation.role.toLowerCase()} for{" "}
             {invitation.email}.
           </p>

@@ -7,6 +7,7 @@
  */
 
 import { usePathname } from "next/navigation";
+import ThemeToggle from "@/components/theme-toggle";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -46,20 +47,23 @@ export default function TopBar({
         <h1 className="text-lg font-semibold">{title}</h1>
       </div>
 
-      {instagramAccountCount > 0 ? (
-        <p className="text-sm text-muted">
-          {instagramAccountCount > 1
-            ? `${instagramAccountCount} accounts`
-            : `@${instagramUsername}`}
-        </p>
-      ) : (
-        <a
-          href="/api/instagram/connect"
-          className="text-sm font-medium px-3 py-1.5 rounded bg-accent text-white hover:bg-accent-hover"
-        >
-          Connect Instagram
-        </a>
-      )}
+      <div className="flex items-center gap-3">
+        {instagramAccountCount > 0 ? (
+          <p className="text-sm text-muted">
+            {instagramAccountCount > 1
+              ? `${instagramAccountCount} accounts`
+              : `@${instagramUsername}`}
+          </p>
+        ) : (
+          <a
+            href="/api/instagram/connect"
+            className="text-sm font-medium px-3 py-1.5 rounded bg-accent text-white hover:bg-accent-hover"
+          >
+            Connect Instagram
+          </a>
+        )}
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

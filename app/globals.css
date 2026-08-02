@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 /* ManyChat Alternative — Design System
-   Plain and functional. No gradients, glass, glow, or animation. */
+   Plain and functional. No gradients, glass, glow, or animation.
 
-@theme inline {
+   Two themes, dark by default. NOT `@theme inline`: utilities must
+   compile to var() references so the [data-theme="light"] override
+   below can restyle at runtime. */
+
+@theme {
   --color-background: #0b0b0d;
   --color-foreground: #f4f4f5;
   --color-surface: #161618;
@@ -11,6 +15,8 @@
   --color-border: #2e2e33;
   --color-border-hover: #45454d;
   --color-muted: #9b9ba3;
+  /* One step quieter than muted: timestamps, footnotes, placeholders. */
+  --color-faint: #71717a;
   --color-accent: #6b8afd;
   --color-accent-hover: #5372e8;
   --color-success: #4ade80;
@@ -20,8 +26,50 @@
   --font-mono: ui-monospace, monospace;
 }
 
+/* Dark values again under an explicit selector, so a subtree can pin
+   itself dark (marketing pages, the Instagram phone preview) even when
+   the app around it runs light: the subtree's own vars beat the values
+   inherited from <html>. */
+[data-theme="dark"] {
+  --color-background: #0b0b0d;
+  --color-foreground: #f4f4f5;
+  --color-surface: #161618;
+  --color-surface-hover: #1f1f22;
+  --color-border: #2e2e33;
+  --color-border-hover: #45454d;
+  --color-muted: #9b9ba3;
+  --color-faint: #71717a;
+  --color-accent: #6b8afd;
+  --color-accent-hover: #5372e8;
+  --color-success: #4ade80;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+}
+
+/* Light theme: same roles, inverted values. Status colors darken one
+   step so they keep contrast on white. */
+[data-theme="light"] {
+  --color-background: #f7f7f8;
+  --color-foreground: #1a1a1e;
+  --color-surface: #ffffff;
+  --color-surface-hover: #efeff2;
+  --color-border: #e0e0e5;
+  --color-border-hover: #c6c6cf;
+  --color-muted: #63636e;
+  --color-faint: #94949d;
+  --color-accent: #4a67e0;
+  --color-accent-hover: #3a55cd;
+  --color-success: #15803d;
+  --color-error: #dc2626;
+  --color-warning: #b45309;
+}
+
 html {
   color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {

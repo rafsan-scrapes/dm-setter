@@ -71,9 +71,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="panel rounded p-5 h-32">
-              <div className="w-10 h-10 rounded bg-zinc-800" />
-              <div className="mt-4 h-6 w-16 bg-zinc-800 rounded" />
-              <div className="mt-2 h-4 w-24 bg-zinc-800/60 rounded" />
+              <div className="w-10 h-10 rounded bg-surface-hover" />
+              <div className="mt-4 h-6 w-16 bg-surface-hover rounded" />
+              <div className="mt-2 h-4 w-24 bg-surface-hover/60 rounded" />
             </div>
           ))}
         </div>
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                   className="w-full rounded-sm bg-accent min-h-[4px]"
                   style={{ height: `${Math.max((day.count / maxDM) * 100, 4)}%` }}
                 />
-                <span className="text-[10px] text-zinc-500">{day.date}</span>
+                <span className="text-[10px] text-faint">{day.date}</span>
               </div>
             ))}
           </div>

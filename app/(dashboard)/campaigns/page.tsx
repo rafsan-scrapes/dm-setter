@@ -342,7 +342,7 @@ export default function CampaignsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search campaigns by name, keyword, or message…"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
           />
           <div className="inline-flex shrink-0 rounded-lg bg-surface p-1">
             {(["all", "active", "paused"] as const).map((s) => (
@@ -448,7 +448,7 @@ export default function CampaignsPage() {
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       auto.isActive
                         ? "bg-success/10 text-success"
-                        : "bg-zinc-500/10 text-zinc-400"
+                        : "bg-muted/10 text-muted"
                     }`}
                   >
                     {auto.isActive ? "Active" : "Paused"}
@@ -486,7 +486,7 @@ export default function CampaignsPage() {
                 <p className="text-sm text-muted truncate">&ldquo;{auto.dmMessage}&rdquo;</p>
 
                 {/* Stats */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-zinc-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-faint">
                   <span className="font-medium text-foreground">
                     {auto._count.dmLogs} runs
                   </span>
@@ -537,7 +537,7 @@ export default function CampaignsPage() {
                   onClick={() => toggleActive(auto.id, auto.isActive)}
                   className={`
                     relative w-11 h-6 rounded-full transition-colors
-                    ${auto.isActive ? "bg-accent" : "bg-zinc-700"}
+                    ${auto.isActive ? "bg-accent" : "bg-border-hover"}
                   `}
                 >
                   <span
@@ -608,7 +608,7 @@ export default function CampaignsPage() {
                   href={playingVideo.postUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-zinc-300 hover:text-white"
+                  className="text-muted hover:text-foreground"
                 >
                   Open on Instagram
                 </a>
@@ -616,7 +616,7 @@ export default function CampaignsPage() {
               <button
                 type="button"
                 onClick={() => setPlayingVideo(null)}
-                className="text-zinc-300 hover:text-white"
+                className="text-muted hover:text-foreground"
               >
                 Close
               </button>

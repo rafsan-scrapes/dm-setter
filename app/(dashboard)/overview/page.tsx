@@ -76,8 +76,8 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="panel rounded p-5 h-24">
-            <div className="h-4 w-16 bg-zinc-800 rounded" />
-            <div className="mt-3 h-6 w-20 bg-zinc-800/60 rounded" />
+            <div className="h-4 w-16 bg-surface-hover rounded" />
+            <div className="mt-3 h-6 w-20 bg-surface-hover/60 rounded" />
           </div>
         ))}
       </div>
@@ -126,7 +126,7 @@ export default function OverviewPage() {
         </div>
         <div className="flex items-end gap-3">
           <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-xs font-semibold uppercase tracking-wide text-faint">
               Range
             </span>
             <select
@@ -195,7 +195,7 @@ export default function OverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-zinc-500 border-b border-border">
+                <tr className="text-left text-xs uppercase tracking-wide text-faint border-b border-border">
                   <th className="py-2 pr-4 font-medium">Post</th>
                   <th className="py-2 px-3 font-medium text-right">Views</th>
                   <th className="py-2 px-3 font-medium text-right">Reach</th>
@@ -246,7 +246,7 @@ export default function OverviewPage() {
                     <td className="py-3 px-3 text-right text-muted">
                       {formatNumber(p.shares)}
                     </td>
-                    <td className="py-3 pl-3 text-right text-zinc-500">
+                    <td className="py-3 pl-3 text-right text-faint">
                       {formatDate(p.timestamp)}
                     </td>
                   </tr>

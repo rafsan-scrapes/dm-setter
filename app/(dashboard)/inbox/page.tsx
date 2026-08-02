@@ -436,7 +436,7 @@ export default function InboxPage() {
                           @{c.contact.username ?? "unknown"}
                         </span>
                       </span>
-                      <span className="shrink-0 text-[11px] text-zinc-500">
+                      <span className="shrink-0 text-[11px] text-faint">
                         {formatTime(c.updatedTime)}
                       </span>
                     </div>
@@ -520,7 +520,7 @@ export default function InboxPage() {
                         <p className="whitespace-pre-wrap break-words">{m.text}</p>
                         <p
                           className={`mt-1 text-[10px] ${
-                            m.fromMe ? "text-white/70" : "text-zinc-500"
+                            m.fromMe ? "text-white/70" : "text-faint"
                           }`}
                         >
                           {formatTime(m.createdTime)}
@@ -592,7 +592,7 @@ export default function InboxPage() {
                     onKeyDown={handleKeyDown}
                     rows={1}
                     placeholder="Write a reply…  (Enter to send, Shift+Enter for a new line)"
-                    className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
                   />
                   <button
                     type="button"

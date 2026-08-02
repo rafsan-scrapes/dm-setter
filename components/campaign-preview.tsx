@@ -447,7 +447,7 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
   ];
 
   return (
-    <div className="flex flex-col items-center gap-5">
+    <div className="flex flex-col items-center gap-5" data-theme="dark">
       <Phone>
         {tab === "post" && (
           <PostScreen

@@ -148,7 +148,7 @@ export default function LogsPage() {
                   {[...Array(5)].map((_, i) => (
                     <tr key={i}>
                       <td colSpan={6} className="px-6 py-4">
-                        <div className="h-4 bg-zinc-800 rounded" />
+                        <div className="h-4 bg-surface-hover rounded" />
                       </td>
                     </tr>
                   ))}

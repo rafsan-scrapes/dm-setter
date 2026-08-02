@@ -81,7 +81,7 @@ export default async function LoginPage({
                   required
                   autoComplete="email"
                   placeholder="you@company.com"
-                  className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none transition-colors"
+                  className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none transition-colors"
                 />
               </div>
 

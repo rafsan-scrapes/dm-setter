@@ -303,7 +303,7 @@ export default function AiSetterPage() {
           ) : (
             <>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                   Who you are
                 </span>
                 <textarea
@@ -311,12 +311,12 @@ export default function AiSetterPage() {
                   onChange={(e) => update("persona", e.target.value)}
                   rows={4}
                   placeholder="Your positioning, offer, audience, and how you talk. The setter grounds every reply in this."
-                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-600 focus:border-accent/40 focus:outline-none"
+                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
                 />
               </label>
 
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                   Setter goal
                 </span>
                 <textarea
@@ -324,24 +324,24 @@ export default function AiSetterPage() {
                   onChange={(e) => update("goal", e.target.value)}
                   rows={2}
                   placeholder="e.g. Qualify for the mentorship (already running a business, 2k+ budget) and book a call."
-                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-600 focus:border-accent/40 focus:outline-none"
+                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
                 />
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                     Booking link
                   </span>
                   <input
                     value={form.bookingLink}
                     onChange={(e) => update("bookingLink", e.target.value)}
                     placeholder="https://cal.com/you/call"
-                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-600 focus:border-accent/40 focus:outline-none"
+                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                     Reply language
                   </span>
                   <select
@@ -388,7 +388,7 @@ export default function AiSetterPage() {
               />
               {form.windowNudgeEnabled && (
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                     Nudge after (hours of silence)
                   </span>
                   <input
@@ -409,7 +409,7 @@ export default function AiSetterPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide text-faint">
                     Confidence to auto-send
                     <span className="tabular-nums text-muted">
                       {Math.round(form.minConfidence * 100)}%
@@ -431,7 +431,7 @@ export default function AiSetterPage() {
                   </span>
                 </label>
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
                     Reply delay (seconds)
                   </span>
                   <input
