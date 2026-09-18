@@ -10,8 +10,13 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 # OpenSSL is required by Prisma's query engine at runtime.
-RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+    openssl \
+    ca-certificates \
+    python3 \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+    
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
